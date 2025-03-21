@@ -369,7 +369,7 @@ def display_thread():
     cv2.destroyAllWindows()
     print("Display thread stopped")
 
-def run_face_recognition(model_name="VGG-Face"):
+def run_face_recognition(model_name="Facenet512"):
     """Main function to run multi-threaded face recognition attendance system."""
     # Initialize
     attendance_file = create_attendance_file()
