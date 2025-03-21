@@ -1,3 +1,4 @@
+# face_recognition_module.py - Wrapper for existing face recognition code
 import cv2
 import os
 import datetime
@@ -13,6 +14,12 @@ from scipy.spatial.distance import cosine
 frame_queue = queue.Queue(maxsize=2)  # Store frames to be processed
 result_queue = queue.Queue()  # Store detection results
 exit_event = threading.Event()  # Signal to exit threads
+# Global callback function
+recognition_callback = None
+
+def set_callback(callback_function):
+    global recognition_callback
+    recognition_callback = callback_function
 
 def create_attendance_file(filename="attendance.csv"):
     """Create attendance file if it doesn't exist."""
@@ -392,6 +399,10 @@ def run_face_recognition(model_name="Facenet512"):
     print(f"Using {model_name} model with OpenCV face detection")
     print(f"Face detection running on CPU, recognition on {device}")
     print("Press 'q' to quit")
+    
+    # Reset exit event
+    global exit_event
+    exit_event.clear()
     
     # Start threads
     capture_thread = threading.Thread(target=video_capture_thread)
