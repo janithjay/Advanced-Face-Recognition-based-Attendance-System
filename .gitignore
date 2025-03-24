@@ -1,2 +1,3 @@
 /.venv
 /known_faces
+/backend/__pycache__
