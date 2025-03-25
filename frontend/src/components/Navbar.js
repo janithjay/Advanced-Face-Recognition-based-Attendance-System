@@ -31,11 +31,6 @@ function Navbar() {
             View Attendance
           </NavLink>
         </li>
-        <li>
-          <NavLink to="/analytics" className={({ isActive }) => isActive ? 'active' : ''}>
-            Analytics
-          </NavLink>
-        </li>
       </ul>
     </nav>
   );

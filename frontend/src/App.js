@@ -6,7 +6,6 @@ import Dashboard from './pages/Dashboard';
 import RegisterStudent from './pages/RegisterStudent';
 import MarkAttendance from './pages/MarkAttendance';
 import ViewAttendance from './pages/ViewAttendance';
-import Analytics from './pages/Analytics';
 import './styles/App.css';
 
 function App() {
@@ -20,7 +19,6 @@ function App() {
             <Route path="/register" element={<RegisterStudent />} />
             <Route path="/mark-attendance" element={<MarkAttendance />} />
             <Route path="/view-attendance" element={<ViewAttendance />} />
-            <Route path="/analytics" element={<Analytics />} />
           </Routes>
         </main>
       </div>

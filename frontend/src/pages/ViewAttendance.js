@@ -1,29 +1,104 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import '../styles/ViewAttendance.css';
 
 function ViewAttendance() {
   const [filters, setFilters] = useState({
     class: '',
     section: '',
-    startDate: '2025-03-01',
-    endDate: '2025-03-21',
+    startDate: '',
+    endDate: '',
     studentId: ''
   });
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [faculties, setFaculties] = useState([]);
+  const [students, setStudents] = useState([]);
 
-  // Mock data for demonstration
-  const mockRecords = [
-    { id: 1, date: '2025-03-21', studentId: 'ST001', name: 'John Smith', class: '10', section: 'A', status: 'Present' },
-    { id: 2, date: '2025-03-21', studentId: 'ST003', name: 'Michael Williams', class: '10', section: 'A', status: 'Absent' },
-    { id: 3, date: '2025-03-21', studentId: 'ST010', name: 'Charlotte Martinez', class: '10', section: 'A', status: 'Absent' },
-    { id: 4, date: '2025-03-20', studentId: 'ST001', name: 'John Smith', class: '10', section: 'A', status: 'Present' },
-    { id: 5, date: '2025-03-20', studentId: 'ST003', name: 'Michael Williams', class: '10', section: 'A', status: 'Present' },
-    { id: 6, date: '2025-03-20', studentId: 'ST010', name: 'Charlotte Martinez', class: '10', section: 'A', status: 'Present' },
-    { id: 7, date: '2025-03-19', studentId: 'ST001', name: 'John Smith', class: '10', section: 'A', status: 'Absent' },
-    { id: 8, date: '2025-03-19', studentId: 'ST003', name: 'Michael Williams', class: '10', section: 'A', status: 'Present' },
-    { id: 9, date: '2025-03-19', studentId: 'ST010', name: 'Charlotte Martinez', class: '10', section: 'A', status: 'Present' },
-  ];
+  // Set default date range to current month
+  useEffect(() => {
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    
+    setFilters(prev => ({
+      ...prev,
+      startDate: formatDateForInput(startOfMonth),
+      endDate: formatDateForInput(today)
+    }));
+    
+    // Fetch faculties and students for filter dropdowns
+    fetchStudents();
+  }, []);
+
+  const formatDateForInput = (date) => {
+    return date.toISOString().split('T')[0];
+  };
+
+  const fetchStudents = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/students');
+      if (!response.ok) {
+        throw new Error('Failed to fetch students');
+      }
+      const data = await response.json();
+      
+      if (data.success) {
+        setStudents(data.students);
+        
+        // Extract unique faculties
+        const uniqueFaculties = [...new Set(data.students.map(student => student.faculty))];
+        setFaculties(uniqueFaculties);
+      }
+    } catch (err) {
+      console.error("Error fetching students:", err);
+      setError("Failed to load student data. Please try again later.");
+    }
+  };
+
+  const fetchAttendanceData = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Build query parameters
+      const queryParams = new URLSearchParams();
+      if (filters.class) queryParams.append('class', filters.class);
+      if (filters.section) queryParams.append('section', filters.section);
+      if (filters.startDate) queryParams.append('startDate', filters.startDate);
+      if (filters.endDate) queryParams.append('endDate', filters.endDate);
+      if (filters.studentId) queryParams.append('studentId', filters.studentId);
+      
+      const response = await fetch(`http://localhost:5000/api/attendance?${queryParams}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch attendance records');
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Transform the data to match our table structure
+        const formattedRecords = data.records.map((record, index) => ({
+          id: record.id || index,
+          date: new Date(record.time).toLocaleDateString(),
+          time: new Date(record.time).toLocaleTimeString(),
+          name: record.name,
+          class: record.class || filters.class || 'N/A',
+          section: record.section || filters.section || 'N/A',
+          status: 'Present'  // Attendance records represent presence
+        }));
+        
+        setRecords(formattedRecords);
+      } else {
+        setError("Failed to load attendance data");
+      }
+    } catch (err) {
+      console.error("Error fetching attendance:", err);
+      setError("Failed to load attendance data. Please try again later.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -35,35 +110,7 @@ function ViewAttendance() {
 
   const handleSearch = (e) => {
     e.preventDefault();
-    setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      // Filter records based on criteria
-      let filteredRecords = [...mockRecords];
-      
-      if (filters.class) {
-        filteredRecords = filteredRecords.filter(record => record.class === filters.class);
-      }
-      
-      if (filters.section) {
-        filteredRecords = filteredRecords.filter(record => record.section === filters.section);
-      }
-      
-      if (filters.studentId) {
-        filteredRecords = filteredRecords.filter(record => record.studentId.includes(filters.studentId));
-      }
-      
-      // Filter by date range
-      filteredRecords = filteredRecords.filter(record => {
-        const recordDate = new Date(record.date);
-        const startDate = new Date(filters.startDate);
-        const endDate = new Date(filters.endDate);
-        return recordDate >= startDate && recordDate <= endDate;
-      });
-      
-      setRecords(filteredRecords);
-      setLoading(false);
-    }, 800);
+    fetchAttendanceData();
   };
 
   const exportCSV = () => {
@@ -73,12 +120,12 @@ function ViewAttendance() {
     }
     
     // Create CSV content
-    const headers = ['Date', 'Student ID', 'Name', 'Class', 'Section', 'Status'];
+    const headers = ['Date', 'Time', 'Name', 'Faculty/Class', 'Section/Program', 'Status'];
     const csvContent = [
       headers.join(','),
       ...records.map(record => [
         record.date,
-        record.studentId,
+        record.time,
         record.name,
         record.class,
         record.section,
@@ -102,18 +149,37 @@ function ViewAttendance() {
   const calculateStats = () => {
     if (records.length === 0) return { present: 0, absent: 0, total: 0, presentRate: 0 };
     
-    const present = records.filter(rec => rec.status === 'Present').length;
-    const total = records.length;
+    const present = records.length; // All records are present since they are attendance records
+    const total = present; // For this implementation, total = present
+    const uniqueStudents = new Set(records.map(rec => rec.name)).size;
     
     return {
       present,
-      absent: total - present,
+      absent: 0, // No absence records in current implementation
       total,
-      presentRate: Math.round((present / total) * 100)
+      presentRate: 100,
+      uniqueStudents
     };
   };
   
   const stats = calculateStats();
+
+  // Group attendance records by date for better visualization
+  const groupedRecords = () => {
+    const grouped = {};
+    
+    records.forEach(record => {
+      if (!grouped[record.date]) {
+        grouped[record.date] = [];
+      }
+      grouped[record.date].push(record);
+    });
+    
+    return grouped;
+  };
+  
+  const attendanceByDate = groupedRecords();
+  const dates = Object.keys(attendanceByDate).sort((a, b) => new Date(b) - new Date(a)); // Sort by newest first
 
   return (
     <div className="view-attendance">
@@ -123,32 +189,34 @@ function ViewAttendance() {
         <form onSubmit={handleSearch} className="filters-form">
           <div className="filters-grid">
             <div className="form-group">
-              <label htmlFor="class">Class</label>
+              <label htmlFor="class">Faculty</label>
               <select
                 id="class"
                 name="class"
                 value={filters.class}
                 onChange={handleChange}
               >
-                <option value="">All Classes</option>
-                <option value="10">10th Grade</option>
-                <option value="11">11th Grade</option>
-                <option value="12">12th Grade</option>
+                <option value="">All Faculties</option>
+                {faculties.map(faculty => (
+                  <option key={faculty} value={faculty}>{faculty}</option>
+                ))}
               </select>
             </div>
             
             <div className="form-group">
-              <label htmlFor="section">Section</label>
+              <label htmlFor="section">Program/Section</label>
               <select
                 id="section"
                 name="section"
                 value={filters.section}
                 onChange={handleChange}
               >
-                <option value="">All Sections</option>
-                <option value="A">Section A</option>
-                <option value="B">Section B</option>
-                <option value="C">Section C</option>
+                <option value="">All Programs</option>
+                <option value="BSc">BSc</option>
+                <option value="BA">BA</option>
+                <option value="BEng">BEng</option>
+                <option value="LLB">LLB</option>
+                <option value="BBA">BBA</option>
               </select>
             </div>
             
@@ -175,12 +243,12 @@ function ViewAttendance() {
             </div>
             
             <div className="form-group">
-              <label htmlFor="studentId">Student ID</label>
+              <label htmlFor="studentId">Student Name/ID</label>
               <input
                 type="text"
                 id="studentId"
                 name="studentId"
-                placeholder="Enter student ID"
+                placeholder="Enter student name or ID"
                 value={filters.studentId}
                 onChange={handleChange}
               />
@@ -195,6 +263,12 @@ function ViewAttendance() {
         </form>
       </div>
       
+      {error && (
+        <div className="error-message">
+          <p>{error}</p>
+        </div>
+      )}
+      
       {records.length > 0 && (
         <div className="results-container">
           <div className="stats-bar">
@@ -203,52 +277,64 @@ function ViewAttendance() {
               <p>{stats.total}</p>
             </div>
             <div className="stat-item">
-              <h3>Present</h3>
-              <p>{stats.present} ({stats.presentRate}%)</p>
+              <h3>Unique Students</h3>
+              <p>{stats.uniqueStudents}</p>
             </div>
             <div className="stat-item">
-              <h3>Absent</h3>
-              <p>{stats.absent} ({100 - stats.presentRate}%)</p>
+              <h3>Date Range</h3>
+              <p>{filters.startDate} to {filters.endDate}</p>
             </div>
             <button onClick={exportCSV} className="export-button">
               Export CSV
             </button>
           </div>
           
-          <div className="table-container">
-            <table className="records-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Student ID</th>
-                  <th>Name</th>
-                  <th>Class</th>
-                  <th>Section</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {records.map(record => (
-                  <tr key={record.id} className={record.status === 'Absent' ? 'absent-row' : ''}>
-                    <td>{record.date}</td>
-                    <td>{record.studentId}</td>
-                    <td>{record.name}</td>
-                    <td>{record.class}</td>
-                    <td>{record.section}</td>
-                    <td className={`status-cell ${record.status.toLowerCase()}`}>
-                      {record.status}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="attendance-by-date">
+            {dates.map(date => (
+              <div key={date} className="date-group">
+                <h3 className="date-header">{date} <span>({attendanceByDate[date].length} records)</span></h3>
+                <div className="table-container">
+                  <table className="records-table">
+                    <thead>
+                      <tr>
+                        <th>Time</th>
+                        <th>Name</th>
+                        <th>Faculty/Class</th>
+                        <th>Program/Section</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {attendanceByDate[date].map(record => (
+                        <tr key={record.id}>
+                          <td>{record.time}</td>
+                          <td>{record.name}</td>
+                          <td>{record.class}</td>
+                          <td>{record.section}</td>
+                          <td className="status-cell present">
+                            Present
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
       
-      {records.length === 0 && !loading && (
+      {records.length === 0 && !loading && !error && (
         <div className="no-records">
-          <p>No records found. Try adjusting your filters.</p>
+          <p>No records found. Try adjusting your filters or click Search to fetch data.</p>
+        </div>
+      )}
+      
+      {loading && (
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>Loading attendance records...</p>
         </div>
       )}
     </div>

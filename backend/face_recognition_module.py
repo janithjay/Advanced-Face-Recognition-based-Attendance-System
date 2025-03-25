@@ -1,4 +1,4 @@
-# face_recognition_module.py - Wrapper for existing face recognition code
+# face_recognition_module.py - Modified to stream instead of display in window
 import cv2
 import os
 import datetime
@@ -7,6 +7,7 @@ import torch
 import threading
 import queue
 import time
+import base64
 from deepface import DeepFace
 from scipy.spatial.distance import cosine
 
@@ -68,6 +69,10 @@ def mark_attendance(name, attendance_file):
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         f.write(f"{name},{timestamp}\n")
     print(f"Marked attendance for {name} at {timestamp}")
+    
+    # Call the recognition callback if set
+    if recognition_callback:
+        recognition_callback(name)
 
 def recognize_face(face_embedding, known_faces, threshold=0.3):
     """Compare face embedding with known faces and return the best match."""
@@ -228,8 +233,8 @@ def detection_recognition_thread(model_name, known_faces, device, attendance_fil
                     processing_times = processing_times[-20:]  # Keep only recent times
             
             # Put results in the result queue
-            if current_results:
-                # Update with new results only when we have them
+            if current_results or not should_detect:
+                # Always send frame to the stream thread, with or without detections
                 result_queue.put((frame, current_results))
             
         except Exception as e:
@@ -296,9 +301,10 @@ def video_capture_thread(camera_id=0):
     cap.release()
     print("Video capture thread stopped")
 
-def display_thread():
-    """Thread for displaying video with recognition results."""
-    print("Display thread started")
+# Replace display_thread with stream_thread
+def stream_thread(socketio=None):
+    """Thread for processing video frames for web streaming."""
+    print("Stream thread started")
     
     last_results = []
     last_frame = None
@@ -318,7 +324,7 @@ def display_thread():
                 time.sleep(0.01)
                 continue
         
-        # Make a copy of the last frame for display
+        # Make a copy of the last frame for streaming
         if last_frame is not None:
             display_frame = last_frame.copy()
             frame_count += 1
@@ -362,22 +368,30 @@ def display_thread():
                 cv2.putText(display_frame, confidence_text, (x1, y2 + 25), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
             
-            # Display the frame
-            cv2.imshow('Face Recognition Attendance', display_frame)
-            
-            # Check for key press
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord('q'):
-                exit_event.set()
-            
-        else:
-            time.sleep(0.01)
+            # Convert the frame to JPEG for streaming
+            ret, buffer = cv2.imencode('.jpg', display_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            if ret:
+                frame_data = base64.b64encode(buffer).decode('utf-8')
+                
+                # Send frame through socketio if available
+                if socketio:
+                    socketio.emit('video_frame', {'frame': frame_data})
+        
+        # Short sleep to avoid CPU overload
+        time.sleep(0.01)
     
-    cv2.destroyAllWindows()
-    print("Display thread stopped")
+    print("Stream thread stopped")
+
+# Global variable to store the socketio instance
+_socketio = None
+
+def set_socketio(socketio_instance):
+    """Set the socketio instance for streaming."""
+    global _socketio
+    _socketio = socketio_instance
 
 def run_face_recognition(model_name="Facenet512"):
-    """Main function to run multi-threaded face recognition attendance system."""
+    """Main function to run multi-threaded face recognition attendance system with web streaming."""
     # Initialize
     attendance_file = create_attendance_file()
     
@@ -398,7 +412,6 @@ def run_face_recognition(model_name="Facenet512"):
     print(f"Multi-threaded Face Recognition Attendance System Started")
     print(f"Using {model_name} model with OpenCV face detection")
     print(f"Face detection running on CPU, recognition on {device}")
-    print("Press 'q' to quit")
     
     # Reset exit event
     global exit_event
@@ -408,37 +421,32 @@ def run_face_recognition(model_name="Facenet512"):
     capture_thread = threading.Thread(target=video_capture_thread)
     detection_thread = threading.Thread(target=detection_recognition_thread, 
                                         args=(model_name, known_faces, device, attendance_file))
-    disp_thread = threading.Thread(target=display_thread)
+    stream_thread_instance = threading.Thread(target=stream_thread, args=(_socketio,))
     
     capture_thread.daemon = True
     detection_thread.daemon = True
-    disp_thread.daemon = True
+    stream_thread_instance.daemon = True
     
     capture_thread.start()
     detection_thread.start()
-    disp_thread.start()
+    stream_thread_instance.start()
     
-    try:
-        # Wait for exit_event
-        while not exit_event.is_set():
-            time.sleep(0.1)
-    except KeyboardInterrupt:
-        print("Interrupted by user")
-    finally:
-        # Signal threads to exit
-        exit_event.set()
-        
-        # Wait for threads to finish
-        capture_thread.join(timeout=2.0)
-        detection_thread.join(timeout=2.0)
-        disp_thread.join(timeout=2.0)
-        
-        print("Face Recognition Attendance System Ended")
+    return {
+        'capture_thread': capture_thread,
+        'detection_thread': detection_thread,
+        'stream_thread': stream_thread_instance
+    }
+
+def stop_face_recognition():
+    """Stop the face recognition threads."""
+    global exit_event
+    exit_event.set()
+    print("Face Recognition Attendance System Stopped")
+    
+    # Allow time for threads to clean up
+    time.sleep(1.0)
+    
+    return {'success': True, 'message': 'Face recognition stopped'}
 
 if __name__ == "__main__":
-    print("Starting Multi-threaded Face Recognition Attendance System with OpenCV...")
-    
-    # Available models: "VGG-Face", "Facenet", "Facenet512", "OpenFace", "DeepFace", "DeepID", "ArcFace", "SFace"
-    MODEL = "Facenet512"  # Good balance between speed and accuracy
-    
-    run_face_recognition(model_name=MODEL)
+    print("For web integration, this module should be imported, not run directly.")

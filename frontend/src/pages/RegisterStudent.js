@@ -1,20 +1,43 @@
-// src/pages/RegisterStudent.js
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import '../styles/Forms.css';
 
 function RegisterStudent() {
+  // Define available subjects with codes
+  const availableSubjects = [
+    { id: 'CS101', name: 'Introduction to Computer Science' },
+    { id: 'CS201', name: 'Data Structures and Algorithms' },
+    { id: 'CS301', name: 'Database Systems' },
+    { id: 'CS401', name: 'Operating Systems' },
+    { id: 'CS501', name: 'Software Engineering' },
+    { id: 'CS601', name: 'Web Development' },
+    { id: 'CS701', name: 'Artificial Intelligence' },
+    { id: 'CS801', name: 'Computer Networks' }
+  ];
+
   const [formData, setFormData] = useState({
+    degreeProgram: '',
+    intake: '',
+    indexNumber: '',
     firstName: '',
     lastName: '',
-    studentId: '',
-    class: '',
-    section: '',
     email: '',
     phone: '',
-    guardianName: '',
-    guardianPhone: '',
-    address: ''
+    universityId: '',
+    nicNumber: '',
+    address: '',
+    subjects: [] // Array to store selected subject IDs
   });
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
+  const [capturedImage, setCapturedImage] = useState(null);
+  const [isCameraReady, setIsCameraReady] = useState(false);
+  
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  let stream = null;
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -22,33 +45,283 @@ function RegisterStudent() {
       ...prevData,
       [name]: value
     }));
+    
+    // Clear messages when form is being edited
+    if (error || success) {
+      setError(null);
+      setSuccess(false);
+    }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    console.log('Student registered:', formData);
-    alert('Student registered successfully!');
-    // Reset form
-    setFormData({
-      firstName: '',
-      lastName: '',
-      studentId: '',
-      class: '',
-      section: '',
-      email: '',
-      phone: '',
-      guardianName: '',
-      guardianPhone: '',
-      address: ''
+  // Handle subject selection changes
+  const handleSubjectChange = (e) => {
+    const { value, checked } = e.target;
+    
+    setFormData(prevData => {
+      if (checked) {
+        // Add subject to array if checked
+        return {
+          ...prevData,
+          subjects: [...prevData.subjects, value]
+        };
+      } else {
+        // Remove subject from array if unchecked
+        return {
+          ...prevData,
+          subjects: prevData.subjects.filter(subject => subject !== value)
+        };
+      }
     });
   };
+
+  const startCamera = async () => {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: 'user'
+        } 
+      });
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        setIsCameraReady(true);
+      }
+    } catch (err) {
+      console.error("Error accessing camera:", err);
+      setError("Could not access camera. Please ensure you've granted permission.");
+    }
+  };
+
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const tracks = videoRef.current.srcObject.getTracks();
+      tracks.forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+      setIsCameraReady(false);
+    }
+  };
+
+  const toggleCamera = () => {
+    if (showCamera) {
+      stopCamera();
+    } else {
+      startCamera();
+    }
+    setShowCamera(!showCamera);
+  };
+
+  const capturePhoto = () => {
+    if (!isCameraReady || !videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    
+    // Set canvas dimensions to match video
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    // Draw the current video frame to the canvas
+    const context = canvas.getContext('2d');
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // Convert the canvas content to a data URL (base64 encoded image)
+    const imageDataURL = canvas.toDataURL('image/jpeg');
+    setCapturedImage(imageDataURL);
+    
+    // Stop the camera after capturing
+    stopCamera();
+    setShowCamera(false);
+  };
+
+  const retakePhoto = () => {
+    setCapturedImage(null);
+    toggleCamera();
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Validate if photo is captured
+    if (!capturedImage) {
+      setError("Please capture a photo before submitting");
+      return;
+    }
+    
+    // Validate if at least one subject is selected
+    if (formData.subjects.length === 0) {
+      setError("Please select at least one subject");
+      return;
+    }
+    
+    setIsSubmitting(true);
+    setError(null);
+    
+    try {
+      // Prepare student data to send
+      const studentDataToSend = {
+        ...formData,
+        faculty: 'FOC', // Hardcoded as Computing faculty
+      };
+      
+      // First, register the student details
+      const studentResponse = await fetch('http://localhost:5000/api/students', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(studentDataToSend),
+      });
+      
+      const studentData = await studentResponse.json();
+      
+      if (!studentResponse.ok) {
+        throw new Error(studentData.error || 'Failed to register student');
+      }
+      
+      // Then, upload the captured image
+      const fullName = `${formData.firstName} ${formData.lastName}`;
+      
+      // Upload the image using webcam registration API
+      const imageResponse = await fetch('http://localhost:5000/api/register_webcam', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: fullName,
+          image: capturedImage
+        }),
+      });
+      
+      const imageData = await imageResponse.json();
+      
+      if (!imageResponse.ok) {
+        throw new Error(imageData.error || 'Failed to upload student image');
+      }
+      
+      console.log('Student registered successfully with image:', studentData, imageData);
+      setSuccess(true);
+      
+      // Reset form and captured image
+      setFormData({
+        degreeProgram: '',
+        intake: '',
+        indexNumber: '',
+        firstName: '',
+        lastName: '',
+        email: '',
+        phone: '',
+        universityId: '',
+        nicNumber: '',
+        address: '',
+        subjects: []
+      });
+      setCapturedImage(null);
+      
+    } catch (err) {
+      console.error('Error registering student:', err);
+      setError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleReset = () => {
+    setFormData({
+      degreeProgram: '',
+      intake: '',
+      indexNumber: '',
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      universityId: '',
+      nicNumber: '',
+      address: '',
+      subjects: []
+    });
+    setError(null);
+    setSuccess(false);
+    setCapturedImage(null);
+    
+    // Make sure camera is stopped if active
+    if (showCamera) {
+      stopCamera();
+      setShowCamera(false);
+    }
+  };
+
+  // Clean up camera resources when component unmounts
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, []);
 
   return (
     <div className="register-student">
       <h1>Register New Student</h1>
       <div className="card form-card">
+        {error && (
+          <div className="alert alert-danger" role="alert">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="alert alert-success" role="alert">
+            Student registered successfully!
+          </div>
+        )}
         <form onSubmit={handleSubmit}>
           <div className="form-grid">
+            {/* Form fields */}
+            <div className="form-group">
+              <label htmlFor="degreeProgram">Degree Program</label>
+              <select
+                id="degreeProgram"
+                name="degreeProgram"
+                className="form-control"
+                value={formData.degreeProgram}
+                onChange={handleChange}
+                required
+              >
+                <option value="">Select Degree Program</option>
+                <option value="CS">BSc(Hons) in Computer Science</option>
+                <option value="SE">BSc(Hons) in Software Engineering</option>
+                <option value="CE">BSc(Hons) in Computer Engineering</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label htmlFor="intake">Intake</label>
+              <select
+                id="intake"
+                name="intake"
+                className="form-control"
+                value={formData.intake}
+                onChange={handleChange}
+                required
+              >
+                <option value="">Select Intake</option>
+                <option value="39">Intake 39</option>
+                <option value="40">Intake 40</option>
+                <option value="41">Intake 41</option>
+                <option value="42">Intake 42</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label htmlFor="indexNumber">Index Number</label>
+              <input
+                type="text"
+                id="indexNumber"
+                name="indexNumber"
+                className="form-control"
+                value={formData.indexNumber}
+                onChange={handleChange}
+                required
+              />
+            </div>
             <div className="form-group">
               <label htmlFor="firstName">First Name</label>
               <input
@@ -74,52 +347,6 @@ function RegisterStudent() {
               />
             </div>
             <div className="form-group">
-              <label htmlFor="studentId">Student ID</label>
-              <input
-                type="text"
-                id="studentId"
-                name="studentId"
-                className="form-control"
-                value={formData.studentId}
-                onChange={handleChange}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="class">Class</label>
-              <select
-                id="class"
-                name="class"
-                className="form-control"
-                value={formData.class}
-                onChange={handleChange}
-                required
-              >
-                <option value="">Select Class</option>
-                <option value="9">9</option>
-                <option value="10">10</option>
-                <option value="11">11</option>
-                <option value="12">12</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label htmlFor="section">Section</label>
-              <select
-                id="section"
-                name="section"
-                className="form-control"
-                value={formData.section}
-                onChange={handleChange}
-                required
-              >
-                <option value="">Select Section</option>
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-                <option value="D">D</option>
-              </select>
-            </div>
-            <div className="form-group">
               <label htmlFor="email">Email</label>
               <input
                 type="email"
@@ -128,10 +355,11 @@ function RegisterStudent() {
                 className="form-control"
                 value={formData.email}
                 onChange={handleChange}
+                required
               />
             </div>
             <div className="form-group">
-              <label htmlFor="phone">Phone</label>
+              <label htmlFor="phone">Phone Number</label>
               <input
                 type="tel"
                 id="phone"
@@ -139,33 +367,35 @@ function RegisterStudent() {
                 className="form-control"
                 value={formData.phone}
                 onChange={handleChange}
+                required
               />
             </div>
             <div className="form-group">
-              <label htmlFor="guardianName">Guardian Name</label>
+              <label htmlFor="universityId">University ID Number</label>
               <input
                 type="text"
-                id="guardianName"
-                name="guardianName"
+                id="universityId"
+                name="universityId"
                 className="form-control"
-                value={formData.guardianName}
+                value={formData.universityId}
                 onChange={handleChange}
                 required
               />
             </div>
             <div className="form-group">
-              <label htmlFor="guardianPhone">Guardian Phone</label>
+              <label htmlFor="nicNumber">NIC Number</label>
               <input
-                type="tel"
-                id="guardianPhone"
-                name="guardianPhone"
+                type="text"
+                id="nicNumber"
+                name="nicNumber"
                 className="form-control"
-                value={formData.guardianPhone}
+                value={formData.nicNumber}
                 onChange={handleChange}
                 required
               />
             </div>
           </div>
+          
           <div className="form-group">
             <label htmlFor="address">Address</label>
             <textarea
@@ -175,11 +405,103 @@ function RegisterStudent() {
               value={formData.address}
               onChange={handleChange}
               rows="3"
+              required
             ></textarea>
           </div>
+          
+          {/* Subject Selection Section */}
+          <div className="subject-selection-section">
+            <h3>Select Enrolled Subjects</h3>
+            <div className="subject-checkboxes">
+              {availableSubjects.map(subject => (
+                <div className="form-check" key={subject.id}>
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    id={`subject-${subject.id}`}
+                    value={subject.id}
+                    checked={formData.subjects.includes(subject.id)}
+                    onChange={handleSubjectChange}
+                  />
+                  <label className="form-check-label" htmlFor={`subject-${subject.id}`}>
+                    {subject.id} - {subject.name}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Face Capture Section */}
+          <div className="face-capture-section">
+            <h3>Student Photo</h3>
+            <div className="photo-capture-area">
+              {showCamera ? (
+                <div className="camera-container">
+                  <video 
+                    ref={videoRef} 
+                    autoPlay 
+                    playsInline 
+                    className="camera-preview"
+                    onLoadedMetadata={() => setIsCameraReady(true)}
+                  ></video>
+                  <button 
+                    type="button" 
+                    className="btn btn-primary"
+                    onClick={capturePhoto}
+                    disabled={!isCameraReady}
+                  >
+                    Capture Photo
+                  </button>
+                </div>
+              ) : capturedImage ? (
+                <div className="captured-image-container">
+                  <img 
+                    src={capturedImage} 
+                    alt="Captured student" 
+                    className="captured-image" 
+                  />
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary"
+                    onClick={retakePhoto}
+                  >
+                    Retake Photo
+                  </button>
+                </div>
+              ) : (
+                <div className="camera-placeholder">
+                  <button 
+                    type="button" 
+                    className="btn btn-primary"
+                    onClick={toggleCamera}
+                  >
+                    Turn On Camera
+                  </button>
+                  <p>Please take a photo for face recognition attendance</p>
+                </div>
+              )}
+              
+              {/* Hidden canvas for processing captured images */}
+              <canvas ref={canvasRef} style={{ display: 'none' }}></canvas>
+            </div>
+          </div>
+          
           <div className="form-actions">
-            <button type="submit" className="btn btn-primary">Register Student</button>
-            <button type="reset" className="btn btn-secondary">Reset Form</button>
+            <button 
+              type="submit" 
+              className="btn btn-primary"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Registering...' : 'Register Student'}
+            </button>
+            <button 
+              type="button" 
+              className="btn btn-secondary"
+              onClick={handleReset}
+              disabled={isSubmitting}
+            >
+              Reset Form
+            </button>
           </div>
         </form>
       </div>
