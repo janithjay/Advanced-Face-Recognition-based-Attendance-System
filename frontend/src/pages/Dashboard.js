@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import '../styles/Dashboard.css';
 
 function Dashboard() {
-  // State to store data from the backend
   const [stats, setStats] = useState({
     totalStudents: 0,
     presentToday: 0,
@@ -37,25 +36,19 @@ function Dashboard() {
   const trainFaceRecognitionModel = async () => {
     try {
       setTrainingStatus({ isTraining: true, success: false, message: 'Training model...' });
-      
-      // Call backend endpoint to train the model
       const response = await fetch('http://localhost:5000/api/train-model', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        headers: { 'Content-Type': 'application/json' }
       });
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || 'Failed to train model');
       }
-      // Update training status
       setTrainingStatus({
         isTraining: false,
         success: true,
         message: data.message || 'Model trained successfully!'
       });
-      // Optional: Clear message after a few seconds
       setTimeout(() => {
         setTrainingStatus({ isTraining: false, success: false, message: '' });
       }, 3000);
@@ -70,49 +63,62 @@ function Dashboard() {
   };
 
   useEffect(() => {
-    // Function to fetch dashboard data
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        
-        // Fetch total students
-        const studentsResponse = await fetch('http://localhost:5000/api/students');
-        const studentsData = await studentsResponse.json();
-        const attendanceResponse = await fetch('http://localhost:5000/api/attendance');
-        const attendanceData = await attendanceResponse.json();
 
-        if (!studentsResponse.ok) {
-          throw new Error(studentsData.error || 'Failed to fetch students');
-        }
-        
+        // Define degree programs to fetch
+        const degreePrograms = ['CE', 'CS', 'SE'];
+
+        // Fetch students from all degree programs via API
+        const allStudents = await Promise.all(
+          degreePrograms.map(async (program) => {
+            const response = await fetch(`http://localhost:5000/api/students?degreeProgram=${program}`);
+            if (!response.ok) {
+              throw new Error(`Failed to fetch students for ${program}`);
+            }
+            const data = await response.json();
+            return data.students.map(student => ({
+              ...student,
+              degreeProgram: program,
+              indexNumber: student.index_number, // Map server key to frontend key
+              firstName: student.first_name,
+              lastName: student.last_name
+            }));
+          })
+        );
+
+        // Flatten students array
+        const students = allStudents.flat();
+
+        // Fetch today's attendance records from API
+        const today = new Date().toISOString().split('T')[0];
+        const attendanceResponse = await fetch(`http://localhost:5000/api/attendance?date=${today}`);
         if (!attendanceResponse.ok) {
-          throw new Error(attendanceData.error || 'Failed to fetch attendance records');
+          throw new Error('Failed to fetch attendance data');
         }
-        
+        const attendanceData = await attendanceResponse.json();
+        const todayAttendance = attendanceData.records;
+
         // Calculate degree-based statistics
         const totalByDegree = {};
         const presentByDegree = {};
         const attendanceRateByDegree = {};
 
-        // Initialize degree counts
-        studentsData.students.forEach(student => {
-          const degree = student.degree_program || 'Unknown';
+        // Initialize total students by degree
+        students.forEach(student => {
+          const degree = student.degreeProgram || 'Unknown';
           totalByDegree[degree] = (totalByDegree[degree] || 0) + 1;
         });
 
-        // Calculate present students by degree
-        const today = new Date().toISOString().split('T')[0];
-        const todayAttendance = attendanceData.records?.filter(
-          record => record.time.startsWith(today)
-        ) || [];
-
+        // Calculate present students by degree using indexNumber and status
         todayAttendance.forEach(record => {
-          const student = studentsData.students.find(s => 
-            `${s.firstName} ${s.lastName}` === record.name
-          );
-          if (student) {
-            const degree = student.degree_program || 'Unknown';
-            presentByDegree[degree] = (presentByDegree[degree] || 0) + 1;
+          if (record.status === 'present') {
+            const student = students.find(s => s.index_number === record.indexNumber);
+            if (student) {
+              const degree = student.degreeProgram || 'Unknown';
+              presentByDegree[degree] = (presentByDegree[degree] || 0) + 1;
+            }
           }
         });
 
@@ -120,35 +126,37 @@ function Dashboard() {
         Object.keys(totalByDegree).forEach(degree => {
           const total = totalByDegree[degree];
           const present = presentByDegree[degree] || 0;
-          attendanceRateByDegree[degree] = Math.round((present / total) * 100);
+          attendanceRateByDegree[degree] = total > 0 ? Math.round((present / total) * 100) : 0;
         });
 
-        setDegreeStats({ 
-          totalByDegree, 
-          presentByDegree, 
-          attendanceRateByDegree 
+        setDegreeStats({
+          totalByDegree,
+          presentByDegree,
+          attendanceRateByDegree
         });
 
-        // Calculate statistics
-        const totalStudents = studentsData.students ? studentsData.students.length : 0;
-        
-        // Get unique students who attended today
-        const uniquePresentToday = new Set();
-        todayAttendance.forEach(record => uniquePresentToday.add(record.name));
-        const presentToday = uniquePresentToday.size;
-        
+        // Calculate overall statistics
+        const totalStudents = students.length;
+
+        // Get unique present students using indexNumber
+        const presentIndexNumbers = new Set(
+          todayAttendance
+            .filter(record => record.status === 'present')
+            .map(record => record.indexNumber)
+        );
+        const presentToday = presentIndexNumbers.size;
+
         // Calculate absent students
         const absentToday = totalStudents - presentToday;
-        
-        // Get the number of classes today (estimate based on unique class/section combinations)
-        const classesSectionsToday = new Set();
-        todayAttendance.forEach(record => {
-          if (record.class && record.section) {
-            classesSectionsToday.add(`${record.class}-${record.section}`);
-          }
-        });
-        const classesToday = classesSectionsToday.size || 0;
-        
+
+        // Get the number of classes today
+        const classesSectionsToday = new Set(
+          todayAttendance.map(record =>
+            `${record.class || 'Unknown'}-${record.section || 'Unknown'}`
+          )
+        );
+        const classesToday = classesSectionsToday.size;
+
         // Update stats state
         setStats({
           totalStudents,
@@ -156,32 +164,20 @@ function Dashboard() {
           absentToday,
           classesToday
         });
-        
-        // Identify absent students by comparing all students with today's attendance
-        const presentStudentIds = new Set();
-        todayAttendance.forEach(record => {
-          // Find student by name in students list
-          const student = studentsData.students.find(s => 
-            `${s.firstName} ${s.lastName}` === record.name
-          );
-          if (student) {
-            presentStudentIds.add(student.id);
-          }
-        });
-        
-        // Students not in presentStudentIds are absent
-        const absentStudents = studentsData.students
-          .filter(student => !presentStudentIds.has(student.id))
+
+        // Identify absent students
+        const absentStudents = students
+          .filter(student => !presentIndexNumbers.has(student.index_number))
           .map(student => ({
-            id: student.indexNumber, // Using index number instead of ID
-            name: `${student.firstName} ${student.lastName}`,
-            class: student.faculty, // Using faculty as class since there's no direct class field
+            id: student.index_number,
+            name: `${student.first_name} ${student.last_name}`,
+            class: student.degreeProgram,
             date: today
           }))
           .slice(0, 4); // Get the first 4 for display
-        
+
         setRecentAbsentees(absentStudents);
-        
+
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
         setError(err.message);
@@ -191,19 +187,19 @@ function Dashboard() {
     };
 
     fetchDashboardData();
-    
+
     // Set up a refresh interval (every 5 minutes)
     const intervalId = setInterval(fetchDashboardData, 5 * 60 * 1000);
-    
+
     return () => clearInterval(intervalId);
   }, []);
 
   // Calculate percentages
-  const presentPercentage = stats.totalStudents > 0 
-    ? Math.round((stats.presentToday / stats.totalStudents) * 100) 
+  const presentPercentage = stats.totalStudents > 0
+    ? Math.round((stats.presentToday / stats.totalStudents) * 100)
     : 0;
-    
-  const absentPercentage = stats.totalStudents > 0 
+
+  const absentPercentage = stats.totalStudents > 0
     ? Math.round((stats.absentToday / stats.totalStudents) * 100)
     : 0;
 
@@ -215,7 +211,7 @@ function Dashboard() {
     { title: 'Classes Today', count: stats.classesToday, icon: '📚' }
   ];
 
-  // New: Date and time formatting
+  // Date and time formatting
   const formattedDate = currentTime.toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -238,8 +234,8 @@ function Dashboard() {
       <div className="dashboard error">
         <h1>Dashboard</h1>
         <div className="alert alert-danger">Error loading dashboard: {error}</div>
-        <button 
-          className="btn btn-primary" 
+        <button
+          className="btn btn-primary"
           onClick={() => window.location.reload()}
         >
           Retry
@@ -258,7 +254,7 @@ function Dashboard() {
           <div className="time">{formattedTime}</div>
         </div>
       </div>
-      
+
       <div className="degree-stats">
         <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
           {[
@@ -266,14 +262,9 @@ function Dashboard() {
             { title: 'Computer Science', key: 'CS' },
             { title: 'Software Engineering', key: 'SE' }
           ].map(({ title, key }) => {
-            // Find the first matching degree or use a default
-            const degree = Object.keys(degreeStats.totalByDegree).find(d => 
-              d.includes(key)
-            ) || Object.keys(degreeStats.totalByDegree)[0];
-
-            const total = degreeStats.totalByDegree[degree] || 0;
-            const present = degreeStats.presentByDegree[degree] || 0;
-            const attendanceRate = degreeStats.attendanceRateByDegree[degree] || 0;
+            const total = degreeStats.totalByDegree[key] || 0;
+            const present = degreeStats.presentByDegree[key] || 0;
+            const attendanceRate = degreeStats.attendanceRateByDegree[key] || 0;
 
             return (
               <div className="stat-card" key={key}>
@@ -300,7 +291,7 @@ function Dashboard() {
           })}
         </div>
       </div>
-      
+
       <div className="dashboard-actions">
         <Link to="/mark-attendance" className="action-card">
           <h3>Mark Attendance</h3>
@@ -310,7 +301,7 @@ function Dashboard() {
           <h3>Register Student</h3>
           <p>Add a new student to the system</p>
         </Link>
-        <button 
+        <button
           className="action-card"
           onClick={trainFaceRecognitionModel}
           disabled={trainingStatus.isTraining}
@@ -322,7 +313,7 @@ function Dashboard() {
 
       {/* Training status message */}
       {trainingStatus.message && (
-        <div 
+        <div
           className={`training-status ${trainingStatus.success ? 'success' : 'error'}`}
           style={{
             marginTop: '20px',
