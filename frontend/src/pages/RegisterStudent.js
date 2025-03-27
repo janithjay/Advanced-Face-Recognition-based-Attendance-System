@@ -1,7 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import Papa from 'papaparse';
 import '../styles/Forms.css';
-import { saveToCSV } from '../fileOperations';
 
 function RegisterStudent() {
   const availableSubjects = [
@@ -40,47 +38,6 @@ function RegisterStudent() {
   const canvasRef = useRef(null);
   let stream = null;
 
-  // Function to save student data to CSV
-  const saveStudentToCSV = async (studentData) => {
-    try {
-      const { degreeProgram } = studentData;
-
-      // Prepare data for CSV
-      const csvData = {
-        indexNumber: studentData.indexNumber,
-        firstName: studentData.firstName,
-        lastName: studentData.lastName,
-        email: studentData.email,
-        phone: studentData.phone,
-        universityId: studentData.universityId,
-        nicNumber: studentData.nicNumber,
-        address: studentData.address.replace(/,/g, ';'), // Replace commas with semicolons
-        subjects: studentData.subjects.join('|'),
-        registrationDate: new Date().toISOString(),
-        intake: studentData.intake
-      };
-
-      // Save to appropriate CSV file
-      await saveToCSV(degreeProgram, csvData);
-      return true;
-    } catch (error) {
-      console.error('Error saving student data:', error);
-      throw error;
-    }
-  };
-
-  // Utility function to save image to local storage
-  const saveStudentPhoto = (indexNumber, imageData) => {
-    try {
-      // Save image to local storage
-      localStorage.setItem(`student_photo_${indexNumber}`, imageData);
-      return true;
-    } catch (error) {
-      console.error('Error saving student photo:', error);
-      throw error;
-    }
-  };
-
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prevData => ({
@@ -95,19 +52,16 @@ function RegisterStudent() {
     }
   };
 
-  // Handle subject selection changes
   const handleSubjectChange = (e) => {
     const { value, checked } = e.target;
 
     setFormData(prevData => {
       if (checked) {
-        // Add subject to array if checked
         return {
           ...prevData,
           subjects: [...prevData.subjects, value]
         };
       } else {
-        // Remove subject from array if unchecked
         return {
           ...prevData,
           subjects: prevData.subjects.filter(subject => subject !== value)
@@ -199,8 +153,10 @@ function RegisterStudent() {
     setError(null);
 
     try {
-      // Prepare data for CSV
-      const csvData = {
+      const studentData = {
+        faculty: 'FOC', // Adjust as needed
+        degreeProgram: formData.degreeProgram,
+        intake: formData.intake,
         indexNumber: formData.indexNumber,
         firstName: formData.firstName,
         lastName: formData.lastName,
@@ -208,23 +164,33 @@ function RegisterStudent() {
         phone: formData.phone,
         universityId: formData.universityId,
         nicNumber: formData.nicNumber,
-        address: formData.address.replace(/,/g, ';'), // Replace commas with semicolons
-        subjects: formData.subjects.join('|'),
-        registrationDate: new Date().toISOString(),
-        intake: formData.intake
+        address: formData.address,
+        subjects: formData.subjects
       };
 
-      // Save student data to CSV
-      await saveToCSV(formData.degreeProgram, csvData);
+      // Send student data to backend
+      const response = await fetch('http://localhost:5000/api/students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(studentData)
+      });
 
-      // Save student photo to local storage (optional)
-      localStorage.setItem(`student_photo_${formData.indexNumber}`, capturedImage);
+      if (!response.ok) {
+        throw new Error('Failed to register student');
+      }
+
+      // Register photo via webcam endpoint
+      await fetch('http://localhost:5000/api/register_webcam', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${formData.firstName} ${formData.lastName}`,
+          image: capturedImage
+        })
+      });
 
       setSuccess(true);
-
-      // Reset form
       handleReset();
-
     } catch (error) {
       console.error('Registration error:', error);
       setError('Failed to register student. Please try again.');
@@ -232,7 +198,6 @@ function RegisterStudent() {
       setIsSubmitting(false);
     }
   };
-
 
   const handleReset = () => {
     setFormData({
