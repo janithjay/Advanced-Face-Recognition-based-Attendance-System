@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
+import Papa from 'papaparse';
 import '../styles/Forms.css';
+import { saveToCSV } from '../fileOperations';
 
 function RegisterStudent() {
-  // Define available subjects with codes
   const availableSubjects = [
     { id: 'CS101', name: 'Introduction to Computer Science' },
     { id: 'CS201', name: 'Data Structures and Algorithms' },
@@ -16,7 +17,7 @@ function RegisterStudent() {
 
   const [formData, setFormData] = useState({
     degreeProgram: '',
-    intake: '',
+    intake: '40', // Fixed intake value
     indexNumber: '',
     firstName: '',
     lastName: '',
@@ -25,19 +26,60 @@ function RegisterStudent() {
     universityId: '',
     nicNumber: '',
     address: '',
-    subjects: [] // Array to store selected subject IDs
+    subjects: []
   });
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [capturedImage, setCapturedImage] = useState(null);
   const [isCameraReady, setIsCameraReady] = useState(false);
-  
+
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   let stream = null;
+
+  // Function to save student data to CSV
+  const saveStudentToCSV = async (studentData) => {
+    try {
+      const { degreeProgram } = studentData;
+
+      // Prepare data for CSV
+      const csvData = {
+        indexNumber: studentData.indexNumber,
+        firstName: studentData.firstName,
+        lastName: studentData.lastName,
+        email: studentData.email,
+        phone: studentData.phone,
+        universityId: studentData.universityId,
+        nicNumber: studentData.nicNumber,
+        address: studentData.address.replace(/,/g, ';'), // Replace commas with semicolons
+        subjects: studentData.subjects.join('|'),
+        registrationDate: new Date().toISOString(),
+        intake: studentData.intake
+      };
+
+      // Save to appropriate CSV file
+      await saveToCSV(degreeProgram, csvData);
+      return true;
+    } catch (error) {
+      console.error('Error saving student data:', error);
+      throw error;
+    }
+  };
+
+  // Utility function to save image to local storage
+  const saveStudentPhoto = (indexNumber, imageData) => {
+    try {
+      // Save image to local storage
+      localStorage.setItem(`student_photo_${indexNumber}`, imageData);
+      return true;
+    } catch (error) {
+      console.error('Error saving student photo:', error);
+      throw error;
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -45,7 +87,7 @@ function RegisterStudent() {
       ...prevData,
       [name]: value
     }));
-    
+
     // Clear messages when form is being edited
     if (error || success) {
       setError(null);
@@ -56,7 +98,7 @@ function RegisterStudent() {
   // Handle subject selection changes
   const handleSubjectChange = (e) => {
     const { value, checked } = e.target;
-    
+
     setFormData(prevData => {
       if (checked) {
         // Add subject to array if checked
@@ -76,14 +118,14 @@ function RegisterStudent() {
 
   const startCamera = async () => {
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
           width: { ideal: 640 },
           height: { ideal: 480 },
           facingMode: 'user'
-        } 
+        }
       });
-      
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         setIsCameraReady(true);
@@ -117,19 +159,19 @@ function RegisterStudent() {
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    
+
     // Set canvas dimensions to match video
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-    
+
     // Draw the current video frame to the canvas
     const context = canvas.getContext('2d');
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
+
     // Convert the canvas content to a data URL (base64 encoded image)
     const imageDataURL = canvas.toDataURL('image/jpeg');
     setCapturedImage(imageDataURL);
-    
+
     // Stop the camera after capturing
     stopCamera();
     setShowCamera(false);
@@ -142,96 +184,60 @@ function RegisterStudent() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Validate if photo is captured
+
     if (!capturedImage) {
       setError("Please capture a photo before submitting");
       return;
     }
-    
-    // Validate if at least one subject is selected
+
     if (formData.subjects.length === 0) {
       setError("Please select at least one subject");
       return;
     }
-    
+
     setIsSubmitting(true);
     setError(null);
-    
+
     try {
-      // Prepare student data to send
-      const studentDataToSend = {
-        ...formData,
-        faculty: 'FOC', // Hardcoded as Computing faculty
+      // Prepare data for CSV
+      const csvData = {
+        indexNumber: formData.indexNumber,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        phone: formData.phone,
+        universityId: formData.universityId,
+        nicNumber: formData.nicNumber,
+        address: formData.address.replace(/,/g, ';'), // Replace commas with semicolons
+        subjects: formData.subjects.join('|'),
+        registrationDate: new Date().toISOString(),
+        intake: formData.intake
       };
-      
-      // First, register the student details
-      const studentResponse = await fetch('http://localhost:5000/api/students', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(studentDataToSend),
-      });
-      
-      const studentData = await studentResponse.json();
-      
-      if (!studentResponse.ok) {
-        throw new Error(studentData.error || 'Failed to register student');
-      }
-      
-      // Then, upload the captured image
-      const fullName = `${formData.firstName} ${formData.lastName}`;
-      
-      // Upload the image using webcam registration API
-      const imageResponse = await fetch('http://localhost:5000/api/register_webcam', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: fullName,
-          image: capturedImage
-        }),
-      });
-      
-      const imageData = await imageResponse.json();
-      
-      if (!imageResponse.ok) {
-        throw new Error(imageData.error || 'Failed to upload student image');
-      }
-      
-      console.log('Student registered successfully with image:', studentData, imageData);
+
+      // Save student data to CSV
+      await saveToCSV(formData.degreeProgram, csvData);
+
+      // Save student photo to local storage (optional)
+      localStorage.setItem(`student_photo_${formData.indexNumber}`, capturedImage);
+
       setSuccess(true);
-      
-      // Reset form and captured image
-      setFormData({
-        degreeProgram: '',
-        intake: '',
-        indexNumber: '',
-        firstName: '',
-        lastName: '',
-        email: '',
-        phone: '',
-        universityId: '',
-        nicNumber: '',
-        address: '',
-        subjects: []
-      });
-      setCapturedImage(null);
-      
-    } catch (err) {
-      console.error('Error registering student:', err);
-      setError(err.message);
+
+      // Reset form
+      handleReset();
+
+    } catch (error) {
+      console.error('Registration error:', error);
+      setError('Failed to register student. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
+
   const handleReset = () => {
     setFormData({
       degreeProgram: '',
-      intake: '',
+      intake: '40',
       indexNumber: '',
       firstName: '',
       lastName: '',
@@ -245,7 +251,7 @@ function RegisterStudent() {
     setError(null);
     setSuccess(false);
     setCapturedImage(null);
-    
+
     // Make sure camera is stopped if active
     if (showCamera) {
       stopCamera();
@@ -293,23 +299,7 @@ function RegisterStudent() {
                 <option value="CE">BSc(Hons) in Computer Engineering</option>
               </select>
             </div>
-            <div className="form-group">
-              <label htmlFor="intake">Intake</label>
-              <select
-                id="intake"
-                name="intake"
-                className="form-control"
-                value={formData.intake}
-                onChange={handleChange}
-                required
-              >
-                <option value="">Select Intake</option>
-                <option value="39">Intake 39</option>
-                <option value="40">Intake 40</option>
-                <option value="41">Intake 41</option>
-                <option value="42">Intake 42</option>
-              </select>
-            </div>
+
             <div className="form-group">
               <label htmlFor="indexNumber">Index Number</label>
               <input
@@ -395,7 +385,7 @@ function RegisterStudent() {
               />
             </div>
           </div>
-          
+
           <div className="form-group">
             <label htmlFor="address">Address</label>
             <textarea
@@ -408,7 +398,7 @@ function RegisterStudent() {
               required
             ></textarea>
           </div>
-          
+
           {/* Subject Selection Section */}
           <div className="subject-selection-section">
             <h3>Select Enrolled Subjects</h3>
@@ -430,22 +420,22 @@ function RegisterStudent() {
               ))}
             </div>
           </div>
-          
+
           {/* Face Capture Section */}
           <div className="face-capture-section">
             <h3>Student Photo</h3>
             <div className="photo-capture-area">
               {showCamera ? (
                 <div className="camera-container">
-                  <video 
-                    ref={videoRef} 
-                    autoPlay 
-                    playsInline 
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
                     className="camera-preview"
                     onLoadedMetadata={() => setIsCameraReady(true)}
                   ></video>
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     className="btn btn-primary"
                     onClick={capturePhoto}
                     disabled={!isCameraReady}
@@ -455,13 +445,13 @@ function RegisterStudent() {
                 </div>
               ) : capturedImage ? (
                 <div className="captured-image-container">
-                  <img 
-                    src={capturedImage} 
-                    alt="Captured student" 
-                    className="captured-image" 
+                  <img
+                    src={capturedImage}
+                    alt="Captured student"
+                    className="captured-image"
                   />
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     className="btn btn-secondary"
                     onClick={retakePhoto}
                   >
@@ -470,8 +460,8 @@ function RegisterStudent() {
                 </div>
               ) : (
                 <div className="camera-placeholder">
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     className="btn btn-primary"
                     onClick={toggleCamera}
                   >
@@ -480,22 +470,22 @@ function RegisterStudent() {
                   <p>Please take a photo for face recognition attendance</p>
                 </div>
               )}
-              
+
               {/* Hidden canvas for processing captured images */}
               <canvas ref={canvasRef} style={{ display: 'none' }}></canvas>
             </div>
           </div>
-          
+
           <div className="form-actions">
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               className="btn btn-primary"
               disabled={isSubmitting}
             >
               {isSubmitting ? 'Registering...' : 'Register Student'}
             </button>
-            <button 
-              type="button" 
+            <button
+              type="button"
               className="btn btn-secondary"
               onClick={handleReset}
               disabled={isSubmitting}
