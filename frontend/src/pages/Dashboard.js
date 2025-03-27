@@ -18,6 +18,20 @@ function Dashboard() {
     success: false,
     message: ''
   });
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [degreeStats, setDegreeStats] = useState({
+    totalByDegree: {},
+    presentByDegree: {},
+    attendanceRateByDegree: {}
+  });
+
+  // Update current time every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Function to train the face recognition model
   const trainFaceRecognitionModel = async () => {
@@ -64,27 +78,59 @@ function Dashboard() {
         // Fetch total students
         const studentsResponse = await fetch('http://localhost:5000/api/students');
         const studentsData = await studentsResponse.json();
-        
+        const attendanceResponse = await fetch('http://localhost:5000/api/attendance');
+        const attendanceData = await attendanceResponse.json();
+
         if (!studentsResponse.ok) {
           throw new Error(studentsData.error || 'Failed to fetch students');
         }
-        
-        // Fetch attendance records to determine today's attendance
-        const attendanceResponse = await fetch('http://localhost:5000/api/attendance');
-        const attendanceData = await attendanceResponse.json();
         
         if (!attendanceResponse.ok) {
           throw new Error(attendanceData.error || 'Failed to fetch attendance records');
         }
         
+        // Calculate degree-based statistics
+        const totalByDegree = {};
+        const presentByDegree = {};
+        const attendanceRateByDegree = {};
+
+        // Initialize degree counts
+        studentsData.students.forEach(student => {
+          const degree = student.degree_program || 'Unknown';
+          totalByDegree[degree] = (totalByDegree[degree] || 0) + 1;
+        });
+
+        // Calculate present students by degree
+        const today = new Date().toISOString().split('T')[0];
+        const todayAttendance = attendanceData.records?.filter(
+          record => record.time.startsWith(today)
+        ) || [];
+
+        todayAttendance.forEach(record => {
+          const student = studentsData.students.find(s => 
+            `${s.firstName} ${s.lastName}` === record.name
+          );
+          if (student) {
+            const degree = student.degree_program || 'Unknown';
+            presentByDegree[degree] = (presentByDegree[degree] || 0) + 1;
+          }
+        });
+
+        // Calculate attendance rates
+        Object.keys(totalByDegree).forEach(degree => {
+          const total = totalByDegree[degree];
+          const present = presentByDegree[degree] || 0;
+          attendanceRateByDegree[degree] = Math.round((present / total) * 100);
+        });
+
+        setDegreeStats({ 
+          totalByDegree, 
+          presentByDegree, 
+          attendanceRateByDegree 
+        });
+
         // Calculate statistics
         const totalStudents = studentsData.students ? studentsData.students.length : 0;
-        
-        // Get today's date and filter today's attendance
-        const today = new Date().toISOString().split('T')[0];
-        const todayAttendance = attendanceData.records ? attendanceData.records.filter(
-          record => record.time.startsWith(today)
-        ) : [];
         
         // Get unique students who attended today
         const uniquePresentToday = new Set();
@@ -169,6 +215,20 @@ function Dashboard() {
     { title: 'Classes Today', count: stats.classesToday, icon: '📚' }
   ];
 
+  // New: Date and time formatting
+  const formattedDate = currentTime.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  const formattedTime = currentTime.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+
   if (loading) {
     return <div className="dashboard loading">Loading dashboard data...</div>;
   }
@@ -190,23 +250,57 @@ function Dashboard() {
 
   return (
     <div className="dashboard">
-      <h1>Dashboard</h1>
-      
-      <div className="stats-grid">
-        {statsArray.map((stat, index) => (
-          <div className="stat-card" key={index}>
-            <div className="stat-icon">{stat.icon}</div>
-            <div className="stat-info">
-              <h3>{stat.title}</h3>
-              <p className="stat-count">{stat.count}</p>
-              {stat.percentage !== undefined && (
-                <p className="stat-percentage">{stat.percentage}%</p>
-              )}
-            </div>
-          </div>
-        ))}
+      <div className="dashboard-header">
+        <br></br>
+        <h1>Dashboard</h1>
+        <div className="current-time">
+          <div className="date">{formattedDate}</div>
+          <div className="time">{formattedTime}</div>
+        </div>
       </div>
+      
+      <div className="degree-stats">
+        <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+          {[
+            { title: 'Computer Engineering', key: 'CE' },
+            { title: 'Computer Science', key: 'CS' },
+            { title: 'Software Engineering', key: 'SE' }
+          ].map(({ title, key }) => {
+            // Find the first matching degree or use a default
+            const degree = Object.keys(degreeStats.totalByDegree).find(d => 
+              d.includes(key)
+            ) || Object.keys(degreeStats.totalByDegree)[0];
 
+            const total = degreeStats.totalByDegree[degree] || 0;
+            const present = degreeStats.presentByDegree[degree] || 0;
+            const attendanceRate = degreeStats.attendanceRateByDegree[degree] || 0;
+
+            return (
+              <div className="stat-card" key={key}>
+                <div className="stat-icon">🎓</div>
+                <div className="stat-info">
+                  <h3>{title}</h3>
+                  <div className="degree-stat-details">
+                    <div className="stat-row">
+                      <span>Total Students:</span>
+                      <span className="stat-count">{total}</span>
+                    </div>
+                    <div className="stat-row">
+                      <span>Present Today:</span>
+                      <span className="stat-count present">{present}</span>
+                    </div>
+                    <div className="stat-row">
+                      <span>Attendance Rate:</span>
+                      <span className="stat-percentage">{attendanceRate}%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      
       <div className="dashboard-actions">
         <Link to="/mark-attendance" className="action-card">
           <h3>Mark Attendance</h3>
