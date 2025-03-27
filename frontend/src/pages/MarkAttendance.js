@@ -58,16 +58,16 @@ function MarkAttendance() {
         if (data.type === 'recognition') {
           const recognizedName = data.name;
           console.log(`Recognized student: ${recognizedName}`);
-          
+
           // Update students list
-          setStudents(prevStudents => 
-            prevStudents.map(student => 
+          setStudents(prevStudents =>
+            prevStudents.map(student =>
               student.name === recognizedName ? { ...student, present: true } : student
             )
           );
-          
+
           // Add to recognized students list
-          setRecognizedStudents(prev => 
+          setRecognizedStudents(prev =>
             prev.includes(recognizedName) ? prev : [...prev, recognizedName]
           );
         }
@@ -94,6 +94,20 @@ function MarkAttendance() {
     }
 
     try {
+      const res = await fetch('http://localhost:5000/api/model-training-status');
+      const data = await res.json();
+      
+      // Changed check to use 'exists' property
+      if (!data.exists) {  // <-- Now correctly checking the model existence
+        alert('Please train the model first from Admin Panel');
+        return;
+      }
+    } catch (error) {
+      alert('Model training check failed');
+      return;
+    }
+
+    try {
       // Start camera and fetch students
       const response = await fetch('http://localhost:5000/api/mark_attendance', {
         method: 'POST',
@@ -105,22 +119,22 @@ function MarkAttendance() {
           lecture: selectedLecture
         }),
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to start attendance process');
       }
-      
+
       // Set loading and activate camera
       setLoading(true);
       setCameraActive(true);
-      
+
       // Reset recognized students
       setRecognizedStudents([]);
-      
+
       // Fetch students (replace with actual API call if needed)
       setStudents(mockStudents);
       setLoading(false);
-      
+
     } catch (error) {
       console.error('Error starting attendance:', error);
       alert('Failed to start attendance. Please try again.');
@@ -134,18 +148,18 @@ function MarkAttendance() {
       const response = await fetch('http://localhost:5000/api/stop_face_recognition', {
         method: 'POST',
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to stop camera');
       }
-      
+
       setCameraActive(false);
       setVideoFrame(null);
       setRecognizedStudents([]);
-      
+
       // Reset students' attendance
       setStudents(mockStudents);
-      
+
     } catch (error) {
       console.error('Error stopping camera:', error);
     }
@@ -153,7 +167,7 @@ function MarkAttendance() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    
+
     // Prepare attendance data
     const attendanceData = {
       intake: selectedIntake,
@@ -174,20 +188,20 @@ function MarkAttendance() {
         },
         body: JSON.stringify(attendanceData)
       })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error('Failed to save attendance');
-        }
-        return response.json();
-      })
-      .then(() => {
-        alert('Attendance saved successfully!');
-        stopAttendance();
-      })
-      .catch(error => {
-        console.error('Error saving attendance:', error);
-        alert('Failed to save attendance. Please try again.');
-      });
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Failed to save attendance');
+          }
+          return response.json();
+        })
+        .then(() => {
+          alert('Attendance saved successfully!');
+          stopAttendance();
+        })
+        .catch(error => {
+          console.error('Error saving attendance:', error);
+          alert('Failed to save attendance. Please try again.');
+        });
     } catch (error) {
       console.error('Error in handleSubmit:', error);
       alert('An unexpected error occurred.');
@@ -218,7 +232,7 @@ function MarkAttendance() {
                   <option value="42">Intake 42</option>
                 </select>
               </div>
-              
+
               <div className="form-group">
                 <label htmlFor="lecture">Subject</label>
                 <select
@@ -238,19 +252,19 @@ function MarkAttendance() {
                 </select>
               </div>
             </div>
-            
+
             <div className="controls-row">
               {!cameraActive ? (
-                <button 
-                  onClick={handleMarkAttendance} 
+                <button
+                  onClick={handleMarkAttendance}
                   className="btn btn-primary mark-attendance-btn"
                   disabled={loading || !selectedIntake || !selectedLecture}
                 >
                   {loading ? 'Starting...' : 'Mark Attendance'}
                 </button>
               ) : (
-                <button 
-                  onClick={stopAttendance} 
+                <button
+                  onClick={stopAttendance}
                   className="btn btn-danger stop-attendance-btn"
                 >
                   Stop Attendance
@@ -272,13 +286,13 @@ function MarkAttendance() {
                   <span className="absent">{students.filter(s => !s.present).length} Absent</span>
                 </div>
               </div>
-              
+
               {/* Video Feed Display */}
               <div className={`video-feed-container ${cameraActive ? 'active' : ''}`}>
                 {cameraActive && (
-                  <img 
+                  <img
                     ref={videoRef}
-                    className="video-feed" 
+                    className="video-feed"
                     alt="Face recognition stream"
                     src={videoFrame || 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='}
                   />
@@ -290,7 +304,7 @@ function MarkAttendance() {
                   </div>
                 )}
               </div>
-              
+
               {recognizedStudents.length > 0 && (
                 <div className="recognition-summary">
                   <h4>Recently Recognized:</h4>
@@ -301,10 +315,10 @@ function MarkAttendance() {
                   </div>
                 </div>
               )}
-              
+
               <div className="student-list">
                 {students.map((student) => (
-                  <div 
+                  <div
                     key={student.id}
                     className={`student-card ${student.present ? 'present' : 'absent'}`}
                     onClick={() => cameraActive && students.find(s => s.id === student.id).name}
@@ -319,7 +333,7 @@ function MarkAttendance() {
                   </div>
                 ))}
               </div>
-              
+
               {cameraActive && (
                 <div className="form-actions">
                   <button type="submit" className="btn btn-success">Save Attendance</button>

@@ -13,6 +13,47 @@ function Dashboard() {
   const [recentAbsentees, setRecentAbsentees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [trainingStatus, setTrainingStatus] = useState({
+    isTraining: false,
+    success: false,
+    message: ''
+  });
+
+  // Function to train the face recognition model
+  const trainFaceRecognitionModel = async () => {
+    try {
+      setTrainingStatus({ isTraining: true, success: false, message: 'Training model...' });
+      
+      // Call backend endpoint to train the model
+      const response = await fetch('http://localhost:5000/api/train-model', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to train model');
+      }
+      // Update training status
+      setTrainingStatus({
+        isTraining: false,
+        success: true,
+        message: data.message || 'Model trained successfully!'
+      });
+      // Optional: Clear message after a few seconds
+      setTimeout(() => {
+        setTrainingStatus({ isTraining: false, success: false, message: '' });
+      }, 3000);
+    } catch (err) {
+      console.error('Error training model:', err);
+      setTrainingStatus({
+        isTraining: false,
+        success: false,
+        message: err.message || 'Failed to train model'
+      });
+    }
+  };
 
   useEffect(() => {
     // Function to fetch dashboard data
@@ -175,7 +216,31 @@ function Dashboard() {
           <h3>Register Student</h3>
           <p>Add a new student to the system</p>
         </Link>
+        <button 
+          className="action-card"
+          onClick={trainFaceRecognitionModel}
+          disabled={trainingStatus.isTraining}
+        >
+          <h3>Train Face Recognition</h3>
+          <p>Update face recognition model</p>
+        </button>
       </div>
+
+      {/* Training status message */}
+      {trainingStatus.message && (
+        <div 
+          className={`training-status ${trainingStatus.success ? 'success' : 'error'}`}
+          style={{
+            marginTop: '20px',
+            padding: '10px',
+            backgroundColor: trainingStatus.success ? '#d4edda' : '#f8d7da',
+            color: trainingStatus.success ? '#155724' : '#721c24',
+            borderRadius: '5px'
+          }}
+        >
+          {trainingStatus.message}
+        </div>
+      )}
 
       <div className="recent-absentees">
         <div className="card">
