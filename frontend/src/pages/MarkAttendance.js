@@ -3,8 +3,8 @@ import '../styles/MarkAttendance.css';
 import io from 'socket.io-client';
 
 function MarkAttendance() {
-  const [selectedIntake, setSelectedIntake] = useState('');
-  const [selectedLecture, setSelectedLecture] = useState('');
+  const [selectedDegree, setSelectedDegree] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
@@ -13,22 +13,14 @@ function MarkAttendance() {
   const [videoFrame, setVideoFrame] = useState(null);
   const videoRef = useRef(null);
 
-  // Mock data for demonstration
-  const mockStudents = [
-    { id: 'ST001', name: 'John Smith', present: false },
-    { id: 'ST002', name: 'Emma Johnson', present: false },
-    { id: 'ST003', name: 'Michael Williams', present: false },
-    { id: 'ST004', name: 'Sophia Brown', present: false },
-    { id: 'ST005', name: 'William Jones', present: false },
-    { id: 'ST006', name: 'Olivia Garcia', present: false },
-    { id: 'ST007', name: 'James Miller', present: false },
-    { id: 'ST008', name: 'Ava Davis', present: false },
-    { id: 'ST009', name: 'Alexander Rodriguez', present: false },
-    { id: 'ST010', name: 'Charlotte Martinez', present: false },
+  // Available degree programs and subjects
+  const degreePrograms = [
+    { code: 'CS', name: 'Computer Science' },
+    { code: 'CE', name: 'Computer Engineering' },
+    { code: 'SE', name: 'Software Engineering' }
   ];
 
-  // Mock data for lectures
-  const mockLectures = [
+  const subjects = [
     { code: 'CS101', name: 'Introduction to Programming' },
     { code: 'CS201', name: 'Data Structures and Algorithms' },
     { code: 'CS301', name: 'Database Systems' },
@@ -48,22 +40,24 @@ function MarkAttendance() {
   // Handle video frames and recognition events
   useEffect(() => {
     if (socket && cameraActive) {
-      // Listen for video frames
       socket.on('video_frame', (data) => {
         setVideoFrame(`data:image/jpeg;base64,${data.frame}`);
       });
 
-      // Listen for recognition events
       socket.on('recognition_event', (data) => {
         if (data.type === 'recognition') {
           const recognizedName = data.name;
           console.log(`Recognized student: ${recognizedName}`);
 
-          // Update students list
+          // Update students list based on recognized name
           setStudents(prevStudents =>
-            prevStudents.map(student =>
-              student.name === recognizedName ? { ...student, present: true } : student
-            )
+            prevStudents.map(student => {
+              const fullName = `${student.first_name} ${student.last_name}`;
+              if (fullName === recognizedName) {
+                return { ...student, present: true };
+              }
+              return student;
+            })
           );
 
           // Add to recognized students list
@@ -80,25 +74,65 @@ function MarkAttendance() {
     }
   }, [socket, cameraActive]);
 
-  // Update the video element when videoFrame changes
+  // Update video element when videoFrame changes
   useEffect(() => {
     if (videoRef.current && videoFrame) {
       videoRef.current.src = videoFrame;
     }
   }, [videoFrame]);
 
+  // Fetch students when degree and subject are selected
+  useEffect(() => {
+    const fetchStudents = async () => {
+      if (!selectedDegree || !selectedSubject) return;
+
+      try {
+        setLoading(true);
+        const response = await fetch(`http://localhost:5000/api/students?degreeProgram=${selectedDegree}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch students');
+        }
+        const data = await response.json();
+        const allStudents = data.students;
+
+        // Filter students who are enrolled in the selected subject
+        const filteredStudents = allStudents
+          .filter(student => {
+            const studentSubjects = student.subjects || []; // subjects is an array from /api/students
+            return studentSubjects.includes(selectedSubject);
+          })
+          .map(student => ({
+            id: student.index_number,
+            name: `${student.first_name} ${student.last_name}`,
+            present: false,
+            first_name: student.first_name,
+            last_name: student.last_name,
+            index_number: student.index_number
+          }));
+
+        setStudents(filteredStudents);
+      } catch (error) {
+        console.error('Error fetching students:', error);
+        alert('Failed to load students. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStudents();
+  }, [selectedDegree, selectedSubject]);
+
   const handleMarkAttendance = async () => {
-    if (!selectedIntake || !selectedLecture) {
-      alert('Please select both intake and lecture');
+    if (!selectedDegree || !selectedSubject) {
+      alert('Please select both degree program and subject');
       return;
     }
 
     try {
       const res = await fetch('http://localhost:5000/api/model-training-status');
       const data = await res.json();
-      
-      // Changed check to use 'exists' property
-      if (!data.exists) {  // <-- Now correctly checking the model existence
+
+      if (!data.exists) {
         alert('Please train the model first from Admin Panel');
         return;
       }
@@ -108,15 +142,15 @@ function MarkAttendance() {
     }
 
     try {
-      // Start camera and fetch students
+      // Start face recognition
       const response = await fetch('http://localhost:5000/api/mark_attendance', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          intake: selectedIntake,
-          lecture: selectedLecture
+          degree: selectedDegree,
+          subject: selectedSubject
         }),
       });
 
@@ -124,27 +158,16 @@ function MarkAttendance() {
         throw new Error('Failed to start attendance process');
       }
 
-      // Set loading and activate camera
-      setLoading(true);
       setCameraActive(true);
-
-      // Reset recognized students
       setRecognizedStudents([]);
-
-      // Fetch students (replace with actual API call if needed)
-      setStudents(mockStudents);
-      setLoading(false);
-
     } catch (error) {
       console.error('Error starting attendance:', error);
       alert('Failed to start attendance. Please try again.');
-      setLoading(false);
     }
   };
 
   const stopAttendance = async () => {
     try {
-      // Call the backend API to stop camera
       const response = await fetch('http://localhost:5000/api/stop_face_recognition', {
         method: 'POST',
       });
@@ -156,22 +179,21 @@ function MarkAttendance() {
       setCameraActive(false);
       setVideoFrame(null);
       setRecognizedStudents([]);
-
-      // Reset students' attendance
-      setStudents(mockStudents);
-
+      // Reset students to initial absent state
+      setStudents(prevStudents =>
+        prevStudents.map(student => ({ ...student, present: false }))
+      );
     } catch (error) {
       console.error('Error stopping camera:', error);
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Prepare attendance data
     const attendanceData = {
-      intake: selectedIntake,
-      lecture: selectedLecture,
+      intake: selectedDegree, // Using degree as intake for consistency with backend
+      lecture: selectedSubject,
       attendanceList: students.map(student => ({
         studentId: student.id,
         name: student.name,
@@ -180,31 +202,21 @@ function MarkAttendance() {
     };
 
     try {
-      // Send attendance data to backend
-      fetch('http://localhost:5000/api/save_attendance', {
+      const response = await fetch('http://localhost:5000/api/save_attendance', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(attendanceData)
-      })
-        .then(response => {
-          if (!response.ok) {
-            throw new Error('Failed to save attendance');
-          }
-          return response.json();
-        })
-        .then(() => {
-          alert('Attendance saved successfully!');
-          stopAttendance();
-        })
-        .catch(error => {
-          console.error('Error saving attendance:', error);
-          alert('Failed to save attendance. Please try again.');
-        });
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save attendance');
+      }
+
+      alert('Attendance saved successfully!');
+      await stopAttendance();
     } catch (error) {
-      console.error('Error in handleSubmit:', error);
-      alert('An unexpected error occurred.');
+      console.error('Error saving attendance:', error);
+      alert('Failed to save attendance. Please try again.');
     }
   };
 
@@ -216,37 +228,38 @@ function MarkAttendance() {
           <div className="selection-container">
             <div className="form-row">
               <div className="form-group">
-                <label htmlFor="intake">Intake</label>
+                <label htmlFor="degree">Degree Program</label>
                 <select
-                  id="intake"
+                  id="degree"
                   className="form-control"
-                  value={selectedIntake}
-                  onChange={(e) => setSelectedIntake(e.target.value)}
+                  value={selectedDegree}
+                  onChange={(e) => setSelectedDegree(e.target.value)}
                   required
                   disabled={cameraActive}
                 >
-                  <option value="">Select Intake</option>
-                  <option value="39">Intake 39</option>
-                  <option value="40">Intake 40</option>
-                  <option value="41">Intake 41</option>
-                  <option value="42">Intake 42</option>
+                  <option value="">Select Degree</option>
+                  {degreePrograms.map(degree => (
+                    <option key={degree.code} value={degree.code}>
+                      {degree.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 
               <div className="form-group">
-                <label htmlFor="lecture">Subject</label>
+                <label htmlFor="subject">Subject</label>
                 <select
-                  id="lecture"
+                  id="subject"
                   className="form-control"
-                  value={selectedLecture}
-                  onChange={(e) => setSelectedLecture(e.target.value)}
+                  value={selectedSubject}
+                  onChange={(e) => setSelectedSubject(e.target.value)}
                   required
                   disabled={cameraActive}
                 >
                   <option value="">Select Subject</option>
-                  {mockLectures.map(lecture => (
-                    <option key={lecture.code} value={lecture.code}>
-                      {lecture.code} - {lecture.name}
+                  {subjects.map(subject => (
+                    <option key={subject.code} value={subject.code}>
+                      {subject.code} - {subject.name}
                     </option>
                   ))}
                 </select>
@@ -258,7 +271,7 @@ function MarkAttendance() {
                 <button
                   onClick={handleMarkAttendance}
                   className="btn btn-primary mark-attendance-btn"
-                  disabled={loading || !selectedIntake || !selectedLecture}
+                  disabled={loading || !selectedDegree || !selectedSubject}
                 >
                   {loading ? 'Starting...' : 'Mark Attendance'}
                 </button>
@@ -277,9 +290,8 @@ function MarkAttendance() {
             <form onSubmit={handleSubmit} className="attendance-form">
               <div className="attendance-header">
                 <h3>
-                  {selectedIntake} - {
-                    mockLectures.find(l => l.code === selectedLecture)?.name || selectedLecture
-                  }
+                  {degreePrograms.find(d => d.code === selectedDegree)?.name || selectedDegree} -{' '}
+                  {subjects.find(s => s.code === selectedSubject)?.name || selectedSubject}
                 </h3>
                 <div className="attendance-summary">
                   <span className="present">{students.filter(s => s.present).length} Present</span>
@@ -321,7 +333,6 @@ function MarkAttendance() {
                   <div
                     key={student.id}
                     className={`student-card ${student.present ? 'present' : 'absent'}`}
-                    onClick={() => cameraActive && students.find(s => s.id === student.id).name}
                   >
                     <div className="student-info">
                       <span className="student-id">{student.id}</span>

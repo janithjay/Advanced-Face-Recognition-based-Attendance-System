@@ -6,6 +6,7 @@ import csv
 import datetime
 from pathlib import Path
 import base64
+import numpy as np
 from werkzeug.utils import secure_filename
 import threading
 import face_recognition_module as frm  # Assuming this is your face recognition module
@@ -229,6 +230,87 @@ def stop_face_recognition():
         active_recognition.join()
         active_recognition = None
     return jsonify({'success': True, 'message': 'Face recognition stopped'}), 200
+
+@app.route('/api/train-model', methods=['POST'])
+def train_face_recognition_model():
+    try:
+        # Path to known faces directory
+        known_faces_dir = app.config['UPLOAD_FOLDER']
+        
+        # Path to save trained model
+        model_save_path = os.path.join('trained_models', 'face_recognition_model')
+        
+        # Ensure the trained models directory exists
+        os.makedirs('trained_models', exist_ok=True)
+        
+        # Collect face data for training
+        face_data = []
+        labels = []
+        
+        # Iterate through known faces directory
+        for person_name in os.listdir(known_faces_dir):
+            person_dir = os.path.join(known_faces_dir, person_name)
+            
+            # Check if it's a directory
+            if os.path.isdir(person_dir):
+                # Iterate through images for this person
+                for image_filename in os.listdir(person_dir):
+                    image_path = os.path.join(person_dir, image_filename)
+                    
+                    # Use face_recognition module to process the image
+                    try:
+                        # Assuming face_recognition_module has a method to extract face embeddings
+                        embedding = frm.extract_face_embedding(image_path)
+                        
+                        if embedding is not None:
+                            face_data.append(embedding)
+                            labels.append(person_name)
+                    except Exception as image_error:
+                        print(f"Error processing image {image_path}: {str(image_error)}")
+        
+        # Verify we have face data
+        if not face_data:
+            return jsonify({
+                'success': False, 
+                'error': 'No valid face images found for training'
+            }), 400
+        
+        # Convert to numpy arrays
+        face_data = np.array(face_data)
+        labels = np.array(labels)
+        
+        # Train the model (this is a placeholder - you'll need to implement 
+        # the actual training based on your face recognition module)
+        try:
+            # Use your face recognition module's training method
+            training_result = frm.train_model(
+                face_data, 
+                labels, 
+                model_save_path
+            )
+            
+            # Return success response
+            return jsonify({
+                'success': True,
+                'message': 'Face recognition model trained successfully',
+                'details': {
+                    'total_images': len(face_data),
+                    'unique_identities': len(set(labels))
+                }
+            })
+        
+        except Exception as train_error:
+            return jsonify({
+                'success': False, 
+                'error': f'Model training failed: {str(train_error)}'
+            }), 500
+    
+    except Exception as e:
+        # Catch any unexpected errors
+        return jsonify({
+            'success': False, 
+            'error': f'Unexpected error during model training: {str(e)}'
+        }), 500
 
 @app.route('/api/model-training-status', methods=['GET'])
 def model_training_status():

@@ -451,6 +451,37 @@ def run_face_recognition(model_name="Facenet512", embeddings_file='trained_model
         'stream_thread': stream_thread_instance
     }
 
+def start_face_recognition(model_name="Facenet512", embeddings_file='trained_models/face_recognition_model'):
+    """Main function using only pre-trained model (renamed from run_face_recognition)"""
+    attendance_file = create_attendance_file()
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    
+    try:
+        known_faces = load_known_faces(embeddings_file)
+    except Exception as e:
+        print(f"Failed to start: {str(e)}")
+        return
+
+    print(f"Using pre-trained model from {embeddings_file}")
+    
+    exit_event.clear()
+    capture_thread = threading.Thread(target=video_capture_thread)
+    detection_thread = threading.Thread(
+        target=detection_recognition_thread,
+        args=(model_name, known_faces, device, attendance_file)
+    )
+    stream_thread_instance = threading.Thread(target=stream_thread, args=(_socketio,))
+    
+    for t in [capture_thread, detection_thread, stream_thread_instance]:
+        t.daemon = True
+        t.start()
+    
+    return {
+        'capture_thread': capture_thread,
+        'detection_thread': detection_thread,
+        'stream_thread': stream_thread_instance
+    }
+
 def stop_face_recognition():
     """Stop the face recognition threads (preserved)"""
     global exit_event
