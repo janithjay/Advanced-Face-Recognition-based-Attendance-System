@@ -21,10 +21,19 @@ function MarkAttendance() {
   ];
 
   const subjects = [
-    { code: 'CS101', name: 'Introduction to Programming' },
-    { code: 'CS201', name: 'Data Structures and Algorithms' },
-    { code: 'CS301', name: 'Database Systems' },
-    { code: 'CS401', name: 'Artificial Intelligence' }
+    { code: 'SE3012', name: 'Engineering Foundation' },
+    { code: 'SE3022', name: 'Software Modeling' },
+    { code: 'SE3032', name: 'Software Construction Technologies and Tools' },
+    { code: 'SE3042', name: 'Software Architecture and Design' },
+    { code: 'CS3023', name: 'Advanced Databases and Big Data Analytics' },
+    { code: 'CS3062', name: 'Research Methodology' },
+    { code: 'CS3052', name: 'Essentials of Computer Law' },
+    { code: 'CS3092', name: 'Computer and Network Security' },
+    { code: 'CS3072', name: 'Logic Programming' },
+    { code: 'CS3082', name: 'Mobile Computing' },
+    { code: 'CS3042', name: 'Image Processing and Computer Vision' },
+    { code: 'CS3012', name: 'UX and UI Engineering' },
+    { code: 'COE3072', name: 'Digital Signal Processing' }
   ];
 
   // Initialize socket connection

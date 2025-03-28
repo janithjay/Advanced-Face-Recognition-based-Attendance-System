@@ -3,14 +3,19 @@ import '../styles/Forms.css';
 
 function RegisterStudent() {
   const availableSubjects = [
-    { id: 'CS101', name: 'Introduction to Computer Science' },
-    { id: 'CS201', name: 'Data Structures and Algorithms' },
-    { id: 'CS301', name: 'Database Systems' },
-    { id: 'CS401', name: 'Operating Systems' },
-    { id: 'CS501', name: 'Software Engineering' },
-    { id: 'CS601', name: 'Web Development' },
-    { id: 'CS701', name: 'Artificial Intelligence' },
-    { id: 'CS801', name: 'Computer Networks' }
+    { id: 'SE3012', name: 'Engineering Foundation' },
+    { id: 'SE3022', name: 'Software Modeling' },
+    { id: 'SE3032', name: 'Software Construction Technologies and Tools' },
+    { id: 'SE3042', name: 'Software Architecture and Design' },
+    { id: 'CS3023', name: 'Advanced Databases and Big Data Analytics' },
+    { id: 'CS3062', name: 'Research Methodology' },
+    { id: 'CS3052', name: 'Essentials of Computer Law' },
+    { id: 'CS3092', name: 'Computer and Network Security' },
+    { id: 'CS3072', name: 'Logic Programming' },
+    { id: 'CS3082', name: 'Mobile Computing' },
+    { id: 'CS3042', name: 'Image Processing and Computer Vision' },
+    { id: 'CS3012', name: 'UX and UI Engineering' },
+    { id: 'COE3072', name: 'Digital Signal Processing' }
   ];
 
   const [formData, setFormData] = useState({
