@@ -50,7 +50,6 @@ function RegisterStudent() {
       [name]: value
     }));
 
-    // Clear messages when form is being edited
     if (error || success) {
       setError(null);
       setSuccess(false);
@@ -119,19 +118,15 @@ function RegisterStudent() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
-    // Set canvas dimensions to match video
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
-    // Draw the current video frame to the canvas
     const context = canvas.getContext('2d');
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Convert the canvas content to a data URL (base64 encoded image)
     const imageDataURL = canvas.toDataURL('image/jpeg');
     setCapturedImage(imageDataURL);
 
-    // Stop the camera after capturing
     stopCamera();
     setShowCamera(false);
   };
@@ -159,7 +154,7 @@ function RegisterStudent() {
 
     try {
       const studentData = {
-        faculty: 'FOC', // Adjust as needed
+        faculty: 'FOC',
         degreeProgram: formData.degreeProgram,
         intake: formData.intake,
         indexNumber: formData.indexNumber,
@@ -173,7 +168,6 @@ function RegisterStudent() {
         subjects: formData.subjects
       };
 
-      // Send student data to backend
       const response = await fetch('http://localhost:5000/api/students', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -181,10 +175,10 @@ function RegisterStudent() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to register student');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to register student');
       }
 
-      // Register photo via webcam endpoint
       await fetch('http://localhost:5000/api/register_webcam', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -194,11 +188,14 @@ function RegisterStudent() {
         })
       });
 
+      // Show alert on successful registration
+      alert('Student registered successfully!');
+
       setSuccess(true);
       handleReset();
     } catch (error) {
       console.error('Registration error:', error);
-      setError('Failed to register student. Please try again.');
+      setError(`Failed to register student: ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -222,14 +219,12 @@ function RegisterStudent() {
     setSuccess(false);
     setCapturedImage(null);
 
-    // Make sure camera is stopped if active
     if (showCamera) {
       stopCamera();
       setShowCamera(false);
     }
   };
 
-  // Clean up camera resources when component unmounts
   useEffect(() => {
     return () => {
       stopCamera();
@@ -252,7 +247,6 @@ function RegisterStudent() {
         )}
         <form onSubmit={handleSubmit}>
           <div className="form-grid">
-            {/* Form fields */}
             <div className="form-group">
               <label htmlFor="degreeProgram">Degree Program</label>
               <select
@@ -369,7 +363,6 @@ function RegisterStudent() {
             ></textarea>
           </div>
 
-          {/* Subject Selection Section */}
           <div className="subject-selection-section">
             <h3>Select Enrolled Subjects</h3>
             <div className="subject-checkboxes">
@@ -391,7 +384,6 @@ function RegisterStudent() {
             </div>
           </div>
 
-          {/* Face Capture Section */}
           <div className="face-capture-section">
             <h3>Student Photo</h3>
             <div className="photo-capture-area">
@@ -441,7 +433,6 @@ function RegisterStudent() {
                 </div>
               )}
 
-              {/* Hidden canvas for processing captured images */}
               <canvas ref={canvasRef} style={{ display: 'none' }}></canvas>
             </div>
           </div>
