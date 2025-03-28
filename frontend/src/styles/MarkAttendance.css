@@ -4,13 +4,6 @@
   margin: 0 auto;
 }
 
-.page-title {
-  margin-bottom: 2rem;
-  font-weight: 600;
-  border-bottom: 2px solid #f0f0f0;
-  padding-bottom: 1rem;
-}
-
 .form-card {
   background-color: #fff;
   border-radius: 8px;
