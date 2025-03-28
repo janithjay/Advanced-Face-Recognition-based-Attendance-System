@@ -1,53 +1,86 @@
 /* src/styles/Navbar.css */
 .navbar {
-    width: 250px;
-    background-color: var(--secondary-bg);
-    padding: 2rem 1rem;
-    display: flex;
-    flex-direction: column;
-    border-right: 1px solid var(--border-color);
-  }
-  
-  .navbar-brand {
-    margin-bottom: 3rem;
-    padding-left: 1rem;
-  }
-  
-  .navbar-brand h2 {
-    font-family: 'Orbitron', sans-serif;
-    color: var(--accent-blue);
-    margin-bottom: 0.25rem;
-  }
-  
-  .navbar-brand p {
-    color: var(--text-dim);
-    font-size: 0.9rem;
-  }
-  
-  .nav-links {
-    list-style: none;
-  }
-  
-  .nav-links li {
-    margin-bottom: 0.5rem;
-  }
-  
-  .nav-links a {
-    display: block;
-    padding: 0.75rem 1rem;
-    color: var(--text-dim);
-    text-decoration: none;
-    border-radius: 4px;
-    transition: all 0.2s ease;
-  }
-  
-  .nav-links a:hover {
-    background-color: rgba(0, 217, 255, 0.1);
-    color: var(--accent-blue);
-  }
-  
-  .nav-links a.active {
-    background-color: rgba(0, 217, 255, 0.15);
-    color: var(--accent-blue);
-    border-left: 3px solid var(--accent-blue);
-  }
+  width: 250px;
+  background-color: var(--secondary-bg);
+  padding: 2rem 1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between; /* Distributes content between top and bottom */
+  border-right: 1px solid var(--border-color);
+  position: fixed; /* Fixes the navbar in place */
+  top: 0;
+  left: 0;
+  height: 100vh; /* Full viewport height */
+  overflow-y: hidden; /* Prevents scrolling within the navbar */
+}
+
+.navbar-brand {
+  margin-bottom: 3rem;
+  padding-left: 1rem;
+}
+
+.navbar-brand h2 {
+  font-family: 'Orbitron', sans-serif;
+  color: var(--accent-blue);
+  margin-bottom: 0.25rem;
+}
+
+.navbar-brand p {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.nav-links {
+  list-style: none;
+  flex-grow: 1; /* Allows nav-links to take up available space if needed */
+}
+
+.nav-links li {
+  margin-bottom: 0.5rem;
+}
+
+.nav-links a {
+  display: block;
+  padding: 0.75rem 1rem;
+  color: var(--text-dim);
+  text-decoration: none;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.nav-links a:hover {
+  background-color: rgba(0, 217, 255, 0.1);
+  color: var(--accent-blue);
+}
+
+.nav-links a.active {
+  background-color: rgba(0, 217, 255, 0.15);
+  color: var(--accent-blue);
+  border-left: 3px solid var(--accent-blue);
+}
+
+.navbar-footer {
+  margin-top: auto; /* Pushes footer to the bottom */
+}
+
+.current-time {
+  text-align: left;
+  background: rgba(255, 255, 255, 0);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  width: 100%;
+}
+
+.current-time .date {
+  font-size: 1rem;
+  font-family: 'Orbitron', sans-serif;
+  color: var(--accent-blue);
+  padding-bottom: 0.3rem;
+}
+
+.current-time .time {
+  font-size: 1.1rem;
+  font-family: 'Orbitron', sans-serif;
+  color: var(--accent-green);
+}

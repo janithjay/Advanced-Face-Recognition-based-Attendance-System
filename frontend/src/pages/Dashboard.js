@@ -211,20 +211,6 @@ function Dashboard() {
     { title: 'Classes Today', count: stats.classesToday, icon: '📚' }
   ];
 
-  // Date and time formatting
-  const formattedDate = currentTime.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-
-  const formattedTime = currentTime.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
-
   if (loading) {
     return <div className="dashboard loading">Loading dashboard data...</div>;
   }
@@ -246,15 +232,7 @@ function Dashboard() {
 
   return (
     <div className="dashboard">
-      <div className="dashboard-header">
-        <br></br>
-        <h1>Dashboard</h1>
-        <div className="current-time">
-          <div className="date">{formattedDate}</div>
-          <div className="time">{formattedTime}</div>
-        </div>
-      </div>
-
+      <h1>Dashboard</h1>
       <div className="degree-stats">
         <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
           {[
@@ -301,14 +279,10 @@ function Dashboard() {
           <h3>Register Student</h3>
           <p>Add a new student to the system</p>
         </Link>
-        <button
-          className="action-card"
-          onClick={trainFaceRecognitionModel}
-          disabled={trainingStatus.isTraining}
-        >
+        <Link onClick={trainFaceRecognitionModel} className="action-card" disabled={trainingStatus.isTraining}>
           <h3>Train Face Recognition</h3>
           <p>Update face recognition model</p>
-        </button>
+        </Link>
       </div>
 
       {/* Training status message */}

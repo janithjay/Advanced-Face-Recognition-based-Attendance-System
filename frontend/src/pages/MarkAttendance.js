@@ -232,7 +232,7 @@ function MarkAttendance() {
 
   return (
     <div className="mark-attendance">
-      <h1 className="page-title">Mark Attendance</h1>
+      <h1>Mark Attendance</h1>
       <div className="card form-card">
         <div className="form-content">
           <div className="selection-container">

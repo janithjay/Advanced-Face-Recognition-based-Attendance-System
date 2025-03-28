@@ -11,9 +11,9 @@ import './styles/App.css';
 function App() {
   return (
     <Router>
-      <div className="app">
+      <div className="app-container">
         <Navbar />
-        <main className="content">
+        <main className="main-content">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/register" element={<RegisterStudent />} />
