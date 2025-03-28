@@ -13,7 +13,6 @@ function MarkAttendance() {
   const [videoFrame, setVideoFrame] = useState(null);
   const videoRef = useRef(null);
 
-  // Available degree programs and subjects
   const degreePrograms = [
     { code: 'CS', name: 'Computer Science' },
     { code: 'CE', name: 'Computer Engineering' },
@@ -36,17 +35,17 @@ function MarkAttendance() {
     { code: 'COE3072', name: 'Digital Signal Processing' }
   ];
 
-  // Initialize socket connection
   useEffect(() => {
     const newSocket = io('http://localhost:5000');
     setSocket(newSocket);
+    console.log('SocketIO connected');
 
     return () => {
       newSocket.disconnect();
+      console.log('SocketIO disconnected');
     };
   }, []);
 
-  // Handle video frames and recognition events
   useEffect(() => {
     if (socket && cameraActive) {
       socket.on('video_frame', (data) => {
@@ -57,22 +56,28 @@ function MarkAttendance() {
         if (data.type === 'recognition') {
           const recognizedName = data.name;
           console.log(`Recognized student: ${recognizedName}`);
-
-          // Update students list based on recognized name
-          setStudents(prevStudents =>
-            prevStudents.map(student => {
-              const fullName = `${student.first_name} ${student.last_name}`;
-              if (fullName === recognizedName) {
+          
+          setStudents(prevStudents => {
+            const updatedStudents = prevStudents.map(student => {
+              const fullName = `${student.first_name}_${student.last_name}`;
+              if (fullName === recognizedName && !student.present) {
+                console.log(`Marking ${fullName} as present for ${selectedDegree} - ${selectedSubject}`);
                 return { ...student, present: true };
               }
               return student;
-            })
-          );
+            });
 
-          // Add to recognized students list
-          setRecognizedStudents(prev =>
-            prev.includes(recognizedName) ? prev : [...prev, recognizedName]
-          );
+            const studentMarked = updatedStudents.some(s => s.present && `${s.first_name} ${s.last_name}` === recognizedName);
+            if (!studentMarked) {
+              console.warn(`Recognized student ${recognizedName} not in ${selectedDegree} - ${selectedSubject}`);
+            } else {
+              setRecognizedStudents(prev => 
+                prev.includes(recognizedName) ? prev : [...prev, recognizedName]
+              );
+            }
+
+            return updatedStudents;
+          });
         }
       });
 
@@ -81,16 +86,14 @@ function MarkAttendance() {
         socket.off('recognition_event');
       };
     }
-  }, [socket, cameraActive]);
+  }, [socket, cameraActive, selectedDegree, selectedSubject]);
 
-  // Update video element when videoFrame changes
   useEffect(() => {
     if (videoRef.current && videoFrame) {
       videoRef.current.src = videoFrame;
     }
   }, [videoFrame]);
 
-  // Fetch students when degree and subject are selected
   useEffect(() => {
     const fetchStudents = async () => {
       if (!selectedDegree || !selectedSubject) return;
@@ -104,10 +107,9 @@ function MarkAttendance() {
         const data = await response.json();
         const allStudents = data.students;
 
-        // Filter students who are enrolled in the selected subject
         const filteredStudents = allStudents
           .filter(student => {
-            const studentSubjects = student.subjects || []; // subjects is an array from /api/students
+            const studentSubjects = student.subjects || [];
             return studentSubjects.includes(selectedSubject);
           })
           .map(student => ({
@@ -120,6 +122,7 @@ function MarkAttendance() {
           }));
 
         setStudents(filteredStudents);
+        console.log(`Loaded ${filteredStudents.length} students for ${selectedDegree} - ${selectedSubject}`);
       } catch (error) {
         console.error('Error fetching students:', error);
         alert('Failed to load students. Please try again.');
@@ -151,12 +154,9 @@ function MarkAttendance() {
     }
 
     try {
-      // Start face recognition
       const response = await fetch('http://localhost:5000/api/mark_attendance', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           degree: selectedDegree,
           subject: selectedSubject
@@ -169,6 +169,7 @@ function MarkAttendance() {
 
       setCameraActive(true);
       setRecognizedStudents([]);
+      console.log('Face recognition started');
     } catch (error) {
       console.error('Error starting attendance:', error);
       alert('Failed to start attendance. Please try again.');
@@ -188,10 +189,10 @@ function MarkAttendance() {
       setCameraActive(false);
       setVideoFrame(null);
       setRecognizedStudents([]);
-      // Reset students to initial absent state
       setStudents(prevStudents =>
         prevStudents.map(student => ({ ...student, present: false }))
       );
+      console.log('Face recognition stopped');
     } catch (error) {
       console.error('Error stopping camera:', error);
     }
@@ -201,7 +202,7 @@ function MarkAttendance() {
     e.preventDefault();
 
     const attendanceData = {
-      intake: selectedDegree, // Using degree as intake for consistency with backend
+      intake: selectedDegree,
       lecture: selectedSubject,
       attendanceList: students.map(student => ({
         studentId: student.id,
@@ -308,7 +309,6 @@ function MarkAttendance() {
                 </div>
               </div>
 
-              {/* Video Feed Display */}
               <div className={`video-feed-container ${cameraActive ? 'active' : ''}`}>
                 {cameraActive && (
                   <img

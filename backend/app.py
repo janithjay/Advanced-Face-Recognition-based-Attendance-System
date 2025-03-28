@@ -9,26 +9,22 @@ import base64
 import numpy as np
 from werkzeug.utils import secure_filename
 import threading
-import face_recognition_module as frm  # Assuming this is your face recognition module
+import face_recognition_module as frm
 
 app = Flask(__name__, static_folder='frontend/build', static_url_path='')
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
 
-# Configure SocketIO
 socketio = SocketIO(app, cors_allowed_origins="http://localhost:3000", ping_timeout=60)
 frm.set_socketio(socketio)
 
-# Configuration
 UPLOAD_FOLDER = 'known_faces'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs('students_data', exist_ok=True)
 os.makedirs('attendance_data', exist_ok=True)
 
-# Store active recognition threads
 active_recognition = None
 
-# Helper Functions for CSV Operations
 def read_students_from_csv(degree_program):
     degree_program = degree_program.lower().replace(' ', '_')
     csv_file = Path('students_data') / f"{degree_program}_students.csv"
@@ -79,7 +75,6 @@ def read_all_students():
             all_students.extend(list(reader))
     return all_students
 
-# SocketIO event handlers
 @socketio.on('connect')
 def handle_connect():
     print('Client connected')
@@ -88,13 +83,11 @@ def handle_connect():
 def handle_disconnect():
     print('Client disconnected')
 
-# Face recognition callback
 def recognition_callback(name):
     socketio.emit('recognition_event', {'type': 'recognition', 'name': name})
 
 frm.set_callback(recognition_callback)
 
-# Routes
 @app.route('/')
 def serve():
     return send_from_directory(app.static_folder, 'index.html')
@@ -108,7 +101,6 @@ def register_student():
 
     students = read_students_from_csv(degree_program)
     
-    # Check for existing student
     for student in students:
         if (student.get('email') == data.get('email') or
             student.get('index_number') == data.get('indexNumber') or
@@ -116,9 +108,7 @@ def register_student():
             student.get('nic_number') == data.get('nicNumber')):
             return jsonify({'success': False, 'error': 'Student already exists'}), 400
     
-    # Generate new student ID
     new_id = max([int(s['id']) for s in students]) + 1 if students else 1
-    # Handle subjects as a pipe-separated string
     subjects = '|'.join(data.get('subjects', [])) if 'subjects' in data and isinstance(data['subjects'], list) else ''
     new_student = {
         'id': str(new_id),
@@ -158,7 +148,6 @@ def get_students():
         return jsonify({'success': False, 'error': 'degreeProgram required'}), 400
     try:
         students = read_students_from_csv(degree_program)
-        # Convert subjects string back to list for frontend compatibility
         for student in students:
             student['subjects'] = student.get('subjects', '').split('|') if student.get('subjects') else []
         return jsonify({'success': True, 'students': students}), 200
@@ -196,7 +185,6 @@ def register_webcam():
     with open(filepath, 'wb') as f:
         f.write(base64.b64decode(image_data))
 
-    # Update student's image_path
     students = read_all_students()
     for student in students:
         if f"{student['first_name']} {student['last_name']}" == name:
@@ -215,11 +203,13 @@ def register_webcam():
 def mark_attendance():
     global active_recognition
     data = request.json
-    if active_recognition and active_recognition.is_alive():
+    if active_recognition and any(t.is_alive() for t in active_recognition.values()):
         return jsonify({'success': False, 'error': 'Recognition already in progress'}), 400
 
-    active_recognition = threading.Thread(target=frm.start_face_recognition, args=())
-    active_recognition.start()
+    active_recognition = frm.start_face_recognition()
+    if not active_recognition:
+        return jsonify({'success': False, 'error': 'Failed to start face recognition'}), 500
+
     return jsonify({'success': True, 'message': 'Attendance marking started'}), 200
 
 @app.route('/api/stop_face_recognition', methods=['POST'])
@@ -227,95 +217,57 @@ def stop_face_recognition():
     global active_recognition
     frm.stop_face_recognition()
     if active_recognition:
-        active_recognition.join()
+        for thread in active_recognition.values():
+            if thread.is_alive():
+                thread.join()
         active_recognition = None
     return jsonify({'success': True, 'message': 'Face recognition stopped'}), 200
 
 @app.route('/api/train-model', methods=['POST'])
 def train_face_recognition_model():
     try:
-        # Path to known faces directory
         known_faces_dir = app.config['UPLOAD_FOLDER']
-        
-        # Path to save trained model
         model_save_path = os.path.join('trained_models', 'face_recognition_model')
-        
-        # Ensure the trained models directory exists
         os.makedirs('trained_models', exist_ok=True)
         
-        # Collect face data for training
         face_data = []
         labels = []
         
-        # Iterate through known faces directory
         for person_name in os.listdir(known_faces_dir):
             person_dir = os.path.join(known_faces_dir, person_name)
-            
-            # Check if it's a directory
             if os.path.isdir(person_dir):
-                # Iterate through images for this person
                 for image_filename in os.listdir(person_dir):
                     image_path = os.path.join(person_dir, image_filename)
-                    
-                    # Use face_recognition module to process the image
                     try:
-                        # Assuming face_recognition_module has a method to extract face embeddings
                         embedding = frm.extract_face_embedding(image_path)
-                        
                         if embedding is not None:
                             face_data.append(embedding)
                             labels.append(person_name)
                     except Exception as image_error:
                         print(f"Error processing image {image_path}: {str(image_error)}")
         
-        # Verify we have face data
         if not face_data:
-            return jsonify({
-                'success': False, 
-                'error': 'No valid face images found for training'
-            }), 400
+            return jsonify({'success': False, 'error': 'No valid face images found for training'}), 400
         
-        # Convert to numpy arrays
         face_data = np.array(face_data)
         labels = np.array(labels)
         
-        # Train the model (this is a placeholder - you'll need to implement 
-        # the actual training based on your face recognition module)
-        try:
-            # Use your face recognition module's training method
-            training_result = frm.train_model(
-                face_data, 
-                labels, 
-                model_save_path
-            )
-            
-            # Return success response
-            return jsonify({
-                'success': True,
-                'message': 'Face recognition model trained successfully',
-                'details': {
-                    'total_images': len(face_data),
-                    'unique_identities': len(set(labels))
-                }
-            })
+        training_result = frm.train_model(face_data, labels, model_save_path)
+        if not training_result['success']:
+            return jsonify(training_result), 500
         
-        except Exception as train_error:
-            return jsonify({
-                'success': False, 
-                'error': f'Model training failed: {str(train_error)}'
-            }), 500
-    
-    except Exception as e:
-        # Catch any unexpected errors
         return jsonify({
-            'success': False, 
-            'error': f'Unexpected error during model training: {str(e)}'
-        }), 500
+            'success': True,
+            'message': 'Face recognition model trained successfully',
+            'details': training_result['details']
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Unexpected error during model training: {str(e)}'}), 500
 
 @app.route('/api/model-training-status', methods=['GET'])
 def model_training_status():
-    # Placeholder: Adjust based on your face_recognition_module
-    model_exists = True
+    model_path = os.path.join('trained_models', 'face_recognition_model')
+    model_exists = os.path.exists(model_path)
     return jsonify({'exists': model_exists}), 200
 
 if __name__ == '__main__':
