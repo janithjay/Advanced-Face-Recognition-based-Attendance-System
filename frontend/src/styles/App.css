@@ -89,6 +89,7 @@ h1, h2, h3 {
 .form-control:focus {
   outline: none;
   border-color: var(--accent-blue);
+  background-color: #393944;
 }
 
 label {
