@@ -28,9 +28,14 @@ function Navbar() {
 
   return (
     <nav className="navbar">
-      <div className="navbar-brand">
-        <h2>ClassTrack</h2>
-        <p>Attendance System</p>
+      <div className='navbar-header'>
+        <div className="navbar-logo">
+          <img src="./logo192.png" alt="Logo" className="logo" />
+        </div>
+        <div className="navbar-brand">
+          <h2>ClassTrack</h2>
+          <p>Attendance System</p>
+        </div>
       </div>
       <ul className="nav-links">
         <li>
