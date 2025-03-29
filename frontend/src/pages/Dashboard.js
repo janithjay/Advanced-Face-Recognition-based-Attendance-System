@@ -98,7 +98,15 @@ function Dashboard() {
           throw new Error('Failed to fetch attendance data');
         }
         const attendanceData = await attendanceResponse.json();
-        const todayAttendance = attendanceData.records;
+        const todayAttendance = attendanceData.records || [];
+
+        // Calculate unique present students using indexNumber
+        const presentIndexNumbers = new Set(
+          todayAttendance
+            .filter(record => record.status.toLowerCase() === 'present')
+            .map(record => record.indexNumber)
+        );
+        const presentToday = presentIndexNumbers.size;
 
         // Calculate degree-based statistics
         const totalByDegree = {};
@@ -111,15 +119,22 @@ function Dashboard() {
           totalByDegree[degree] = (totalByDegree[degree] || 0) + 1;
         });
 
-        // Calculate present students by degree using indexNumber and status
+        // Calculate unique present students by degree
         todayAttendance.forEach(record => {
-          if (record.status === 'present') {
-            const student = students.find(s => s.index_number === record.indexNumber);
+          if (record.status.toLowerCase() === 'present') {
+            const student = students.find(s => s.indexNumber === record.indexNumber);
             if (student) {
               const degree = student.degreeProgram || 'Unknown';
-              presentByDegree[degree] = (presentByDegree[degree] || 0) + 1;
+              // Use a Set to ensure uniqueness within each degree
+              presentByDegree[degree] = presentByDegree[degree] || new Set();
+              presentByDegree[degree].add(record.indexNumber);
             }
           }
+        });
+
+        // Convert Sets to counts
+        Object.keys(presentByDegree).forEach(degree => {
+          presentByDegree[degree] = presentByDegree[degree].size;
         });
 
         // Calculate attendance rates
@@ -137,19 +152,9 @@ function Dashboard() {
 
         // Calculate overall statistics
         const totalStudents = students.length;
-
-        // Get unique present students using indexNumber
-        const presentIndexNumbers = new Set(
-          todayAttendance
-            .filter(record => record.status === 'present')
-            .map(record => record.indexNumber)
-        );
-        const presentToday = presentIndexNumbers.size;
-
-        // Calculate absent students
         const absentToday = totalStudents - presentToday;
 
-        // Get the number of classes today
+        // Get the number of unique classes (degree-subject combinations) today
         const classesSectionsToday = new Set(
           todayAttendance.map(record =>
             `${record.class || 'Unknown'}-${record.section || 'Unknown'}`
@@ -167,10 +172,10 @@ function Dashboard() {
 
         // Identify absent students
         const absentStudents = students
-          .filter(student => !presentIndexNumbers.has(student.index_number))
+          .filter(student => !presentIndexNumbers.has(student.indexNumber))
           .map(student => ({
-            id: student.index_number,
-            name: `${student.first_name} ${student.last_name}`,
+            id: student.indexNumber,
+            name: `${student.firstName} ${student.lastName}`,
             class: student.degreeProgram,
             date: today
           }))

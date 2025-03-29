@@ -41,7 +41,7 @@ h1, h2, h3 {
 }
 
 .card {
-  background-color: var(--card-bg);
+  background: linear-gradient(145deg, rgba(22, 22, 50, 0.8), rgba(10, 10, 26, 0.8));
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 1.5rem;

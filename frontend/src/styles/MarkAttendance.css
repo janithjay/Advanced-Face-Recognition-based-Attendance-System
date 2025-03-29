@@ -533,3 +533,14 @@
 .mirror-toggle-btn:hover {
   background-color: rgba(0, 0, 0, 0.7);
 }
+
+.already-marked-message {
+  background-color: #fff3cd;
+  color: #856404;
+  padding: 10px;
+  border: 1px solid #ffeeba;
+  border-radius: 4px;
+  margin: 10px 0;
+  text-align: center;
+  font-weight: 500;
+}

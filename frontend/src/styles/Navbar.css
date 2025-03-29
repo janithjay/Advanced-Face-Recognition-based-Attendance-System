@@ -64,7 +64,7 @@
 }
 
 .current-time {
-  text-align: left;
+  text-align: center;
   background: rgba(255, 255, 255, 0);
   padding: 0.75rem 1rem;
   border-radius: 8px;
@@ -76,13 +76,13 @@
   font-size: 1rem;
   font-family: 'Orbitron', sans-serif;
   color: var(--accent-blue);
-  padding-bottom: 0.3rem;
 }
 
 .current-time .time {
   font-size: 1.1rem;
   font-family: 'Orbitron', sans-serif;
   color: var(--accent-green);
+  padding-bottom: 0.3rem;
 }
 
 .logo{

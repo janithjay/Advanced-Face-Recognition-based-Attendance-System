@@ -61,8 +61,8 @@ function Navbar() {
       </ul>
       <div className="navbar-footer">
         <div className="current-time">
-          <div className="date">{formattedDate}</div>
           <div className="time">{formattedTime}</div>
+          <div className="date">{formattedDate}</div>
         </div>
       </div>
     </nav>

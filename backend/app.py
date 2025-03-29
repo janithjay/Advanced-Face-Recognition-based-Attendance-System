@@ -136,7 +136,48 @@ def register_student():
 def save_attendance():
     data = request.json
     try:
-        save_attendance_to_csv(data)
+        today = datetime.datetime.now().strftime('%Y-%m-%d')
+        csv_dir = Path('attendance_data')
+        csv_dir.mkdir(exist_ok=True)
+        csv_file = csv_dir / f"attendance_{today}.csv"
+        headers = ['indexNumber', 'name', 'status', 'timestamp', 'class', 'section']
+
+        # Read existing records
+        existing_records = []
+        if csv_file.exists():
+            with open(csv_file, 'r', newline='') as f:
+                reader = csv.DictReader(f)
+                existing_records = list(reader)
+
+        # Filter out duplicates
+        new_records = []
+        for record in data['attendanceList']:
+            if not any(
+                existing['indexNumber'] == record['studentId'] and
+                existing['section'] == data.get('lecture', '') and
+                existing['class'] == data.get('intake', '')
+                for existing in existing_records
+            ):
+                new_records.append({
+                    'indexNumber': record['studentId'],
+                    'name': record['name'],
+                    'status': 'present' if record['present'] else 'absent',
+                    'timestamp': datetime.datetime.utcnow().isoformat(),
+                    'class': data.get('intake', ''),
+                    'section': data.get('lecture', '')
+                })
+
+        if not new_records:
+            return jsonify({'success': True, 'message': 'No new attendance records to save'}), 200
+
+        # Append new records
+        file_exists = csv_file.exists()
+        with open(csv_file, 'a', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=headers)
+            if not file_exists:
+                writer.writeheader()
+            writer.writerows(new_records)
+
         return jsonify({'success': True, 'message': 'Attendance saved successfully'}), 200
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -156,17 +197,35 @@ def get_students():
 
 @app.route('/api/attendance', methods=['GET'])
 def get_attendance():
+    degree_program = request.args.get('degreeProgram')
+    subject = request.args.get('subject')
     date = request.args.get('date')
-    if not date:
-        return jsonify({'success': False, 'error': 'date required'}), 400
+    student_id = request.args.get('studentId')
+    
     try:
-        csv_file = Path('attendance_data') / f"attendance_{date}.csv"
-        if not csv_file.exists():
-            return jsonify({'success': True, 'records': []}), 200
-        with open(csv_file, 'r', newline='') as f:
-            reader = csv.DictReader(f)
-            records = list(reader)
-        return jsonify({'success': True, 'records': records}), 200
+        csv_file = Path('attendance_data') / f"attendance_{date}.csv" if date else None
+        all_records = []
+        
+        if csv_file and csv_file.exists():
+            with open(csv_file, 'r', newline='') as f:
+                reader = csv.DictReader(f)
+                all_records = list(reader)
+        elif not date:  # If no specific date, fetch all files if studentId is provided
+            csv_dir = Path('attendance_data')
+            for csv_file in csv_dir.glob('attendance_*.csv'):
+                with open(csv_file, 'r', newline='') as f:
+                    reader = csv.DictReader(f)
+                    all_records.extend(list(reader))
+        
+        filtered_records = all_records
+        if degree_program:
+            filtered_records = [r for r in filtered_records if r['class'] == degree_program]
+        if subject:
+            filtered_records = [r for r in filtered_records if r['section'] == subject]
+        if student_id:
+            filtered_records = [r for r in filtered_records if r['indexNumber'] == student_id]
+        
+        return jsonify({'success': True, 'records': filtered_records}), 200
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

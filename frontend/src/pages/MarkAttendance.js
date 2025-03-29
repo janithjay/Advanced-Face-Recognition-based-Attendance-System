@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import '../styles/MarkAttendance.css';
 import io from 'socket.io-client';
+import { readAttendanceFromCSV } from '../fileOperations'; // Import to check existing records
 
 function MarkAttendance() {
   const [selectedDegree, setSelectedDegree] = useState('');
@@ -9,6 +10,7 @@ function MarkAttendance() {
   const [loading, setLoading] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [recognizedStudents, setRecognizedStudents] = useState([]);
+  const [alreadyMarkedMessage, setAlreadyMarkedMessage] = useState(''); // New state for message
   const [socket, setSocket] = useState(null);
   const [videoFrame, setVideoFrame] = useState(null);
   const videoRef = useRef(null);
@@ -52,28 +54,48 @@ function MarkAttendance() {
         setVideoFrame(`data:image/jpeg;base64,${data.frame}`);
       });
 
-      socket.on('recognition_event', (data) => {
+      socket.on('recognition_event', async (data) => {
         if (data.type === 'recognition') {
           const recognizedName = data.name;
           console.log(`Recognized student: ${recognizedName}`);
-          
+
+          // Check if student is already marked for today
+          const today = new Date().toISOString().split('T')[0];
+          const existingRecords = await readAttendanceFromCSV(today);
+          const isAlreadyMarked = existingRecords.some(
+            record =>
+              record.name === recognizedName &&
+              record.section === selectedSubject &&
+              record.class === selectedDegree
+          );
+
           setStudents(prevStudents => {
             const updatedStudents = prevStudents.map(student => {
               const fullName = `${student.first_name}_${student.last_name}`;
-              if (fullName === recognizedName && !student.present) {
-                console.log(`Marking ${fullName} as present for ${selectedDegree} - ${selectedSubject}`);
-                return { ...student, present: true };
+              if (fullName === recognizedName) {
+                if (isAlreadyMarked) {
+                  setAlreadyMarkedMessage(
+                    `${student.name} is already marked for ${selectedSubject} today`
+                  );
+                  setTimeout(() => setAlreadyMarkedMessage(''), 3000); // Clear message after 3s
+                  return student; // No change if already marked
+                } else if (!student.present) {
+                  console.log(`Marking ${fullName} as present for ${selectedDegree} - ${selectedSubject}`);
+                  return { ...student, present: true };
+                }
               }
               return student;
             });
 
-            const studentMarked = updatedStudents.some(s => s.present && `${s.first_name} ${s.last_name}` === recognizedName);
-            if (!studentMarked) {
-              console.warn(`Recognized student ${recognizedName} not in ${selectedDegree} - ${selectedSubject}`);
-            } else {
-              setRecognizedStudents(prev => 
+            const studentMarked = updatedStudents.some(
+              s => s.present && `${s.first_name} ${s.last_name}` === recognizedName
+            );
+            if (!isAlreadyMarked && studentMarked) {
+              setRecognizedStudents(prev =>
                 prev.includes(recognizedName) ? prev : [...prev, recognizedName]
               );
+            } else if (!studentMarked) {
+              console.warn(`Recognized student ${recognizedName} not in ${selectedDegree} - ${selectedSubject}`);
             }
 
             return updatedStudents;
@@ -192,6 +214,7 @@ function MarkAttendance() {
       setStudents(prevStudents =>
         prevStudents.map(student => ({ ...student, present: false }))
       );
+      setAlreadyMarkedMessage('');
       console.log('Face recognition stopped');
     } catch (error) {
       console.error('Error stopping camera:', error);
@@ -201,15 +224,34 @@ function MarkAttendance() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const today = new Date().toISOString().split('T')[0];
+    const existingRecords = await readAttendanceFromCSV(today);
+
     const attendanceData = {
       intake: selectedDegree,
       lecture: selectedSubject,
-      attendanceList: students.map(student => ({
-        studentId: student.id,
-        name: student.name,
-        present: student.present
-      }))
+      attendanceList: students
+        .filter(student => {
+          const isAlreadyMarked = existingRecords.some(
+            record =>
+              record.name === student.name &&
+              record.section === selectedSubject &&
+              record.class === selectedDegree
+          );
+          return student.present && !isAlreadyMarked; // Only include new present students
+        })
+        .map(student => ({
+          studentId: student.id,
+          name: student.name,
+          present: student.present
+        }))
     };
+
+    if (attendanceData.attendanceList.length === 0) {
+      alert('No new attendance records to save.');
+      await stopAttendance();
+      return;
+    }
 
     try {
       const response = await fetch('http://localhost:5000/api/save_attendance', {
@@ -295,6 +337,12 @@ function MarkAttendance() {
               )}
             </div>
           </div>
+
+          {alreadyMarkedMessage && (
+            <div className="already-marked-message">
+              {alreadyMarkedMessage}
+            </div>
+          )}
 
           {students.length > 0 && (
             <form onSubmit={handleSubmit} className="attendance-form">
