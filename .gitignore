@@ -6,3 +6,5 @@ attendance.csv
 /instance
 /students_data
 /attendance_data
+generate_report.py
+Attendance_System_Report.docx

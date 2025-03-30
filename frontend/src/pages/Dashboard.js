@@ -316,7 +316,7 @@ function Dashboard() {
                   <tr>
                     <th>Index Number</th>
                     <th>Name</th>
-                    <th>Class</th>
+                    <th>Degree</th>
                     <th>Date</th>
                     <th>Action</th>
                   </tr>
