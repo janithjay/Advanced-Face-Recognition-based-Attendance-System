@@ -142,14 +142,12 @@ def save_attendance():
         csv_file = csv_dir / f"attendance_{today}.csv"
         headers = ['indexNumber', 'name', 'status', 'timestamp', 'class', 'section']
 
-        # Read existing records
         existing_records = []
         if csv_file.exists():
             with open(csv_file, 'r', newline='') as f:
                 reader = csv.DictReader(f)
                 existing_records = list(reader)
 
-        # Filter out duplicates
         new_records = []
         for record in data['attendanceList']:
             if not any(
@@ -170,7 +168,6 @@ def save_attendance():
         if not new_records:
             return jsonify({'success': True, 'message': 'No new attendance records to save'}), 200
 
-        # Append new records
         file_exists = csv_file.exists()
         with open(csv_file, 'a', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=headers)
@@ -210,7 +207,7 @@ def get_attendance():
             with open(csv_file, 'r', newline='') as f:
                 reader = csv.DictReader(f)
                 all_records = list(reader)
-        elif not date:  # If no specific date, fetch all files if studentId is provided
+        elif not date:
             csv_dir = Path('attendance_data')
             for csv_file in csv_dir.glob('attendance_*.csv'):
                 with open(csv_file, 'r', newline='') as f:
@@ -233,30 +230,35 @@ def get_attendance():
 def register_webcam():
     data = request.json
     name = secure_filename(data.get('name'))
-    image_data = data.get('image')
-    if not name or not image_data:
-        return jsonify({'success': False, 'error': 'Name and image are required'}), 400
+    images = data.get('images', [])  # Expecting a list of base64 images
+    
+    if not name or not images:
+        return jsonify({'success': False, 'error': 'Name and at least one image are required'}), 400
 
-    image_data = image_data.split(',')[1]
     student_dir = os.path.join(app.config['UPLOAD_FOLDER'], name)
     os.makedirs(student_dir, exist_ok=True)
-    filepath = os.path.join(student_dir, f"{name}.jpg")
-    with open(filepath, 'wb') as f:
-        f.write(base64.b64decode(image_data))
+
+    saved_paths = []
+    for idx, image_data in enumerate(images):
+        image_data = image_data.split(',')[1]  # Remove data:image/jpeg;base64,
+        filepath = os.path.join(student_dir, f"{name}_angle_{idx}.jpg")
+        with open(filepath, 'wb') as f:
+            f.write(base64.b64decode(image_data))
+        saved_paths.append(filepath)
 
     students = read_all_students()
     for student in students:
         if f"{student['first_name']} {student['last_name']}" == name:
-            student['image_path'] = filepath
+            student['image_path'] = saved_paths[0]  # Store first image path for reference
             degree_program = student['degree_program']
             students_in_program = read_students_from_csv(degree_program)
             for s in students_in_program:
                 if s['id'] == student['id']:
-                    s['image_path'] = filepath
+                    s['image_path'] = saved_paths[0]
             write_students_to_csv(degree_program, students_in_program)
             break
 
-    return jsonify({'success': True, 'message': f'Image saved for {name}'}), 200
+    return jsonify({'success': True, 'message': f'{len(images)} images saved for {name}'}), 200
 
 @app.route('/api/mark_attendance', methods=['POST'])
 def mark_attendance():
@@ -265,7 +267,7 @@ def mark_attendance():
     if active_recognition and any(t.is_alive() for t in active_recognition.values()):
         return jsonify({'success': False, 'error': 'Recognition already in progress'}), 400
 
-    active_recognition = frm.start_face_recognition()
+    active_recognition = frm.start_face_recognition(detector_backend="mediapipe")
     if not active_recognition:
         return jsonify({'success': False, 'error': 'Failed to start face recognition'}), 500
 

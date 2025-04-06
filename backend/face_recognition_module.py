@@ -11,16 +11,20 @@ import base64
 import pickle
 from deepface import DeepFace
 from scipy.spatial.distance import cosine
+import mediapipe as mp  # New import for MediaPipe
 
 # Global variables for thread communication
 frame_queue = queue.Queue(maxsize=2)  # Store frames to be processed
 result_queue = queue.Queue()  # Store detection results
 exit_event = threading.Event()  # Signal to exit threads
-# Global callback function
 recognition_callback = None
 _socketio = None  # SocketIO instance
 
-# ========== New Functions Added for App.py Integration ==========
+# Initialize MediaPipe Face Detection
+mp_face_detection = mp.solutions.face_detection
+mp_drawing = mp.solutions.drawing_utils
+face_detector = mp_face_detection.FaceDetection(min_detection_confidence=0.5)
+
 def set_socketio(socketio_instance):
     """Set the SocketIO instance for video streaming"""
     global _socketio
@@ -48,7 +52,6 @@ def train_model(face_data=None, labels=None, model_save_path='trained_models/fac
     2. Direct embedding training from app.py's API
     """
     if face_data is not None and labels is not None:
-        # New mode: Training from pre-collected embeddings
         try:
             trained_embeddings = {}
             for emb, name in zip(face_data, labels):
@@ -74,20 +77,16 @@ def train_model(face_data=None, labels=None, model_save_path='trained_models/fac
                 'error': f"Embedding-based training failed: {str(e)}"
             }
     else:
-        # Original directory-based training
         return train_face_recognition_model(
             known_faces_dir=known_faces_dir,
             embeddings_file=model_save_path,
             model_name=model_name
         )
 
-# ========== Original Functions (Preserved) ==========
-# All original functions remain unchanged below this line
-
+# Original Functions (Preserved)
 def train_face_recognition_model(known_faces_dir="known_faces", 
-                                  embeddings_file='trained_models/face_recognition_model', 
-                                  model_name="Facenet512"):
-    """Train model and save embeddings strictly to file"""
+                                 embeddings_file='trained_models/face_recognition_model', 
+                                 model_name="Facenet512"):
     print(f"Training model with {model_name}...")
     
     if not os.path.exists(known_faces_dir):
@@ -118,9 +117,6 @@ def train_face_recognition_model(known_faces_dir="known_faces",
     return trained_embeddings
 
 def load_trained_embeddings(embeddings_file='trained_models/face_recognition_model'):
-    """
-    Load pre-computed face embeddings from file (preserved)
-    """
     try:
         with open(embeddings_file, 'rb') as f:
             return pickle.load(f)
@@ -136,14 +132,12 @@ def set_callback(callback_function):
     recognition_callback = callback_function
 
 def create_attendance_file(filename="attendance.csv"):
-    """Create attendance file if it doesn't exist (preserved)"""
     if not os.path.exists(filename):
         with open(filename, "w") as f:
             f.write("Name,Time\n")
     return filename
 
 def load_known_faces(embeddings_file='trained_models/face_recognition_model'):
-    """Strictly load from embeddings file without directory fallback"""
     try:
         with open(embeddings_file, 'rb') as f:
             embeddings = pickle.load(f)
@@ -156,17 +150,14 @@ def load_known_faces(embeddings_file='trained_models/face_recognition_model'):
         raise RuntimeError(f"Error loading embeddings: {str(e)}")
 
 def mark_attendance(name, attendance_file):
-    """Mark attendance for a recognized person (preserved)"""
     with open(attendance_file, "a") as f:
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         f.write(f"{name},{timestamp}\n")
     print(f"Marked attendance for {name} at {timestamp}")
-    
     if recognition_callback:
         recognition_callback(name)
 
 def recognize_face(face_embedding, known_faces, threshold=0.3):
-    """Compare face embedding with known faces (preserved)"""
     best_match = "Unknown"
     min_distance = threshold
     
@@ -177,10 +168,10 @@ def recognize_face(face_embedding, known_faces, threshold=0.3):
                 best_match = person_name
                 min_distance = distance
     
-    return best_match, min_distance
+    confidence = max(0, 1 - min_distance)  # Confidence as a percentage
+    return best_match, confidence
 
 def detect_faces_opencv(frame, scale_factor=1.1, min_neighbors=5, min_size=(30, 30)):
-    """Detect faces using OpenCV's built-in face detector (preserved)"""
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     
@@ -197,8 +188,25 @@ def detect_faces_opencv(frame, scale_factor=1.1, min_neighbors=5, min_size=(30, 
     
     return face_boxes
 
+# New Function: MediaPipe Face Detection
+def detect_faces_mediapipe(frame):
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    results = face_detector.process(rgb_frame)
+    face_boxes = []
+    
+    if results.detections:
+        for detection in results.detections:
+            bboxC = detection.location_data.relative_bounding_box
+            h, w, _ = frame.shape
+            x1 = int(bboxC.xmin * w)
+            y1 = int(bboxC.ymin * h)
+            x2 = int((bboxC.xmin + bboxC.width) * w)
+            y2 = int((bboxC.ymin + bboxC.height) * h)
+            face_boxes.append((x1, y1, x2, y2))
+    
+    return face_boxes
+
 def extract_face_region(frame, box, margin=10):
-    """Extract face region with margin (preserved)"""
     x1, y1, x2, y2 = box
     height, width = frame.shape[:2]
     x1 = max(0, x1 - margin)
@@ -212,13 +220,12 @@ def extract_face_region(frame, box, margin=10):
     face_region = frame[y1:y2, x1:x2]
     return face_region
 
-def detection_recognition_thread(model_name, known_faces, device, attendance_file):
-    """Thread for processing frames (preserved)"""
+def detection_recognition_thread(model_name, known_faces, device, attendance_file, detector_backend="mediapipe"):
     marked_present = set()
     last_detection_time = time.time() - 10
     detection_interval = 0.5
     
-    print(f"Detection thread started, recognition on: {device}")
+    print(f"Detection thread started, recognition on: {device}, detector: {detector_backend}")
     
     processing_times = []
     
@@ -232,6 +239,8 @@ def detection_recognition_thread(model_name, known_faces, device, attendance_fil
             face_model = DeepFace.build_model(model_name)
     except Exception as e:
         print(f"Error loading DeepFace model: {str(e)}")
+    
+    detect_faces = detect_faces_mediapipe if detector_backend == "mediapipe" else detect_faces_opencv
     
     while not exit_event.is_set():
         try:
@@ -251,7 +260,7 @@ def detection_recognition_thread(model_name, known_faces, device, attendance_fil
                 detection_size = (320, 240)
                 detection_frame = cv2.resize(frame, detection_size)
                 
-                face_boxes = detect_faces_opencv(detection_frame)
+                face_boxes = detect_faces(detection_frame)
                 
                 scale_x = frame.shape[1] / detection_size[0]
                 scale_y = frame.shape[0] / detection_size[1]
@@ -284,7 +293,7 @@ def detection_recognition_thread(model_name, known_faces, device, attendance_fil
                             if name != "Unknown" and name not in marked_present:
                                 mark_attendance(name, attendance_file)
                                 marked_present.add(name)
-                                print(f"Recognized: {name} with confidence: {(1-confidence)*100:.1f}%")
+                                print(f"Recognized: {name} with confidence: {confidence:.2f}")
                         
                         except Exception as e:
                             print(f"Error processing face: {str(e)}")
@@ -308,7 +317,6 @@ def detection_recognition_thread(model_name, known_faces, device, attendance_fil
     print("Detection thread stopped")
 
 def video_capture_thread(camera_id=0):
-    """Thread for capturing video frames (preserved)"""
     cap = cv2.VideoCapture(camera_id)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
@@ -360,7 +368,6 @@ def video_capture_thread(camera_id=0):
     print("Video capture thread stopped")
 
 def stream_thread(socketio=None):
-    """Thread for video streaming (preserved)"""
     print("Stream thread started")
     
     last_results = []
@@ -397,7 +404,7 @@ def stream_thread(socketio=None):
             
             for box, name, confidence in last_results:
                 x1, y1, x2, y2 = box
-                confidence_text = f"Match: {(1-confidence)*100:.1f}%"
+                confidence_text = f"Confidence: {confidence:.2f}"
                 color = (0, 255, 0) if name != "Unknown" else (0, 0, 255)
                 
                 cv2.rectangle(display_frame, (x1, y1), (x2, y2), color, 3)
@@ -412,16 +419,16 @@ def stream_thread(socketio=None):
             ret, buffer = cv2.imencode('.jpg', display_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
             if ret:
                 frame_data = base64.b64encode(buffer).decode('utf-8')
-                
+                results_data = [{'box': box, 'name': name, 'confidence': confidence} 
+                                for box, name, confidence in last_results]
                 if _socketio:
-                    _socketio.emit('video_frame', {'frame': frame_data})
+                    _socketio.emit('video_frame', {'frame': frame_data, 'results': results_data})
         
         time.sleep(0.01)
     
     print("Stream thread stopped")
 
-def run_face_recognition(model_name="Facenet512", embeddings_file='trained_models/face_recognition_model'):
-    """Main function using only pre-trained model"""
+def start_face_recognition(model_name="Facenet512", embeddings_file='trained_models/face_recognition_model', detector_backend="mediapipe"):
     attendance_file = create_attendance_file()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     
@@ -437,38 +444,7 @@ def run_face_recognition(model_name="Facenet512", embeddings_file='trained_model
     capture_thread = threading.Thread(target=video_capture_thread)
     detection_thread = threading.Thread(
         target=detection_recognition_thread,
-        args=(model_name, known_faces, device, attendance_file)
-    )
-    stream_thread_instance = threading.Thread(target=stream_thread, args=(_socketio,))
-    
-    for t in [capture_thread, detection_thread, stream_thread_instance]:
-        t.daemon = True
-        t.start()
-    
-    return {
-        'capture_thread': capture_thread,
-        'detection_thread': detection_thread,
-        'stream_thread': stream_thread_instance
-    }
-
-def start_face_recognition(model_name="Facenet512", embeddings_file='trained_models/face_recognition_model'):
-    """Main function using only pre-trained model (renamed from run_face_recognition)"""
-    attendance_file = create_attendance_file()
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    
-    try:
-        known_faces = load_known_faces(embeddings_file)
-    except Exception as e:
-        print(f"Failed to start: {str(e)}")
-        return
-
-    print(f"Using pre-trained model from {embeddings_file}")
-    
-    exit_event.clear()
-    capture_thread = threading.Thread(target=video_capture_thread)
-    detection_thread = threading.Thread(
-        target=detection_recognition_thread,
-        args=(model_name, known_faces, device, attendance_file)
+        args=(model_name, known_faces, device, attendance_file, detector_backend)
     )
     stream_thread_instance = threading.Thread(target=stream_thread, args=(_socketio,))
     
@@ -483,7 +459,6 @@ def start_face_recognition(model_name="Facenet512", embeddings_file='trained_mod
     }
 
 def stop_face_recognition():
-    """Stop the face recognition threads (preserved)"""
     global exit_event
     exit_event.set()
     print("Face Recognition Attendance System Stopped")

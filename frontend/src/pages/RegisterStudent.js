@@ -20,7 +20,7 @@ function RegisterStudent() {
 
   const [formData, setFormData] = useState({
     degreeProgram: '',
-    intake: '40', // Fixed intake value
+    intake: '40',
     indexNumber: '',
     firstName: '',
     lastName: '',
@@ -36,12 +36,15 @@ function RegisterStudent() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
-  const [capturedImage, setCapturedImage] = useState(null);
+  const [capturedImages, setCapturedImages] = useState([]); // Array for multiple images
   const [isCameraReady, setIsCameraReady] = useState(false);
+  const [captureStep, setCaptureStep] = useState(0); // Track capture progress
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   let stream = null;
+
+  const angles = ['Front', 'Left', 'Right']; // Define angles to capture
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -49,7 +52,6 @@ function RegisterStudent() {
       ...prevData,
       [name]: value
     }));
-
     if (error || success) {
       setError(null);
       setSuccess(false);
@@ -58,18 +60,11 @@ function RegisterStudent() {
 
   const handleSubjectChange = (e) => {
     const { value, checked } = e.target;
-
     setFormData(prevData => {
       if (checked) {
-        return {
-          ...prevData,
-          subjects: [...prevData.subjects, value]
-        };
+        return { ...prevData, subjects: [...prevData.subjects, value] };
       } else {
-        return {
-          ...prevData,
-          subjects: prevData.subjects.filter(subject => subject !== value)
-        };
+        return { ...prevData, subjects: prevData.subjects.filter(subject => subject !== value) };
       }
     });
   };
@@ -77,13 +72,8 @@ function RegisterStudent() {
   const startCamera = async () => {
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          facingMode: 'user'
-        }
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
       });
-
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         setIsCameraReady(true);
@@ -125,22 +115,27 @@ function RegisterStudent() {
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     const imageDataURL = canvas.toDataURL('image/jpeg');
-    setCapturedImage(imageDataURL);
+    setCapturedImages(prev => [...prev, imageDataURL]);
 
-    stopCamera();
-    setShowCamera(false);
+    if (captureStep < angles.length - 1) {
+      setCaptureStep(prev => prev + 1);
+    } else {
+      stopCamera();
+      setShowCamera(false);
+    }
   };
 
-  const retakePhoto = () => {
-    setCapturedImage(null);
+  const retakePhotos = () => {
+    setCapturedImages([]);
+    setCaptureStep(0);
     toggleCamera();
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!capturedImage) {
-      setError("Please capture a photo before submitting");
+    if (capturedImages.length < angles.length) {
+      setError(`Please capture all ${angles.length} angles of your face`);
       return;
     }
 
@@ -184,13 +179,11 @@ function RegisterStudent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: `${formData.firstName} ${formData.lastName}`,
-          image: capturedImage
+          images: capturedImages // Send array of images
         })
       });
 
-      // Show alert on successful registration
       alert('Student registered successfully!');
-
       setSuccess(true);
       handleReset();
     } catch (error) {
@@ -217,8 +210,8 @@ function RegisterStudent() {
     });
     setError(null);
     setSuccess(false);
-    setCapturedImage(null);
-
+    setCapturedImages([]);
+    setCaptureStep(0);
     if (showCamera) {
       stopCamera();
       setShowCamera(false);
@@ -263,7 +256,6 @@ function RegisterStudent() {
                 <option value="CE">BSc(Hons) in Computer Engineering</option>
               </select>
             </div>
-
             <div className="form-group">
               <label htmlFor="indexNumber">Index Number</label>
               <input
@@ -396,61 +388,45 @@ function RegisterStudent() {
                     className="camera-preview"
                     onLoadedMetadata={() => setIsCameraReady(true)}
                   ></video>
+                  <p>Please face {angles[captureStep]} and click Capture</p>
                   <button
                     type="button"
                     className="btn btn-primary"
                     onClick={capturePhoto}
                     disabled={!isCameraReady}
                   >
-                    Capture Photo
+                    Capture {angles[captureStep]}
                   </button>
                 </div>
-              ) : capturedImage ? (
+              ) : capturedImages.length === angles.length ? (
                 <div className="captured-image-container">
-                  <img
-                    src={capturedImage}
-                    alt="Captured student"
-                    className="captured-image"
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={retakePhoto}
-                  >
-                    Retake Photo
+                  {capturedImages.map((img, idx) => (
+                    <div key={idx}>
+                      <img src={img} alt={`Captured ${angles[idx]}`} className="captured-image" />
+                      <p>{angles[idx]}</p>
+                    </div>
+                  ))}
+                  <button type="button" className="btn btn-secondary" onClick={retakePhotos}>
+                    Retake All Photos
                   </button>
                 </div>
               ) : (
                 <div className="camera-placeholder">
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={toggleCamera}
-                  >
+                  <button type="button" className="btn btn-primary" onClick={toggleCamera}>
                     Turn On Camera
                   </button>
-                  <p>Please take a photo for face recognition attendance</p>
+                  <p>Please take photos from {angles.join(', ')} angles for face recognition</p>
                 </div>
               )}
-
               <canvas ref={canvasRef} style={{ display: 'none' }}></canvas>
             </div>
           </div>
 
           <div className="form-actions">
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={isSubmitting}
-            >
+            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
               {isSubmitting ? 'Registering...' : 'Register Student'}
             </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={handleReset}
-              disabled={isSubmitting}
-            >
+            <button type="button" className="btn btn-secondary" onClick={handleReset} disabled={isSubmitting}>
               Reset Form
             </button>
           </div>
