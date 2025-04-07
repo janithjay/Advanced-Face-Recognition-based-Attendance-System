@@ -8,3 +8,4 @@ attendance.csv
 /attendance_data
 generate_report.py
 Attendance_System_Report.docx
+*.pyc
