@@ -92,7 +92,12 @@ source .venv/bin/activate
 pip install flask flask-cors flask-socketio deepface opencv-python mediapipe torch scipy numpy werkzeug
 ```
 
-**Note**: For GPU support, install PyTorch with CUDA:
+**Note**: For production environments, it's recommended to create a `requirements.txt` file with specific version numbers to ensure reproducibility. You can generate one after installation with:
+```bash
+pip freeze > requirements.txt
+```
+
+**For GPU support**, install PyTorch with CUDA:
 ```bash
 # Visit https://pytorch.org/get-started/locally/ for specific instructions
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
@@ -230,7 +235,7 @@ Advanced-Face-Recognition-based-Attendance-System/
 
 ### Detection Settings
 You can modify detection parameters in `backend/face_recognition_module.py`:
-- **Recognition Threshold**: Adjust `threshold` parameter in `recognize_face()` function (default: 0.3, range: 0.1-0.5, lower = stricter matching)
+- **Recognition Threshold**: Adjust `threshold` parameter in `recognize_face()` function (default: 0.3, range: 0.1-0.6, lower = more strict/higher confidence required, higher = more lenient)
 - **Detector Backend**: Choose between "mediapipe" (faster, recommended) or "opencv" in `start_face_recognition()` function
 - **Model**: Change face recognition model in training/recognition functions (default: "Facenet512", alternatives: "VGG-Face", "Facenet", "ArcFace")
 - **Video Resolution**: Modify `cap.set()` parameters in `video_capture_thread()` (default: 640x480)
