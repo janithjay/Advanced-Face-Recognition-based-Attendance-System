@@ -230,10 +230,11 @@ Advanced-Face-Recognition-based-Attendance-System/
 
 ### Detection Settings
 You can modify detection parameters in `backend/face_recognition_module.py`:
-- **Recognition Threshold**: Adjust `threshold` parameter (default: 0.3)
-- **Detector Backend**: Choose between "mediapipe" or "opencv"
-- **Model**: Change face recognition model (default: "Facenet512")
-- **Video Resolution**: Modify in `video_capture_thread()` function
+- **Recognition Threshold**: Adjust `threshold` parameter in `recognize_face()` function (default: 0.3, range: 0.1-0.5, lower = stricter matching)
+- **Detector Backend**: Choose between "mediapipe" (faster, recommended) or "opencv" in `start_face_recognition()` function
+- **Model**: Change face recognition model in training/recognition functions (default: "Facenet512", alternatives: "VGG-Face", "Facenet", "ArcFace")
+- **Video Resolution**: Modify `cap.set()` parameters in `video_capture_thread()` (default: 640x480)
+- **Detection Interval**: Adjust `detection_interval` in `detection_recognition_thread()` (default: 0.5 seconds)
 
 ### CORS Settings
 Update CORS origins in `backend/app.py` if deploying to production:
@@ -291,7 +292,7 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 
 ## 📄 License
 
-This project is open source and available under the [MIT License](LICENSE).
+This project is open source. Please check with the repository owner for specific license terms or add a LICENSE file before using in production.
 
 ## 👥 Authors
 
